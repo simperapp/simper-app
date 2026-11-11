@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Film, Image as ImageIcon, Plus, Trash2, Clock, UploadCloud, Eye, Link2, Loader2, X } from 'lucide-react';
+import { Film, Image as ImageIcon, Plus, Trash2, Clock, UploadCloud, Eye, Link2, Loader2, X, Cloud } from 'lucide-react';
 import type { MediaItem } from '../types/database';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface Props {
   media: MediaItem[];
@@ -23,6 +24,7 @@ export const MediaLibraryView: React.FC<Props> = ({
     const saved = localStorage.getItem('simper_default_duration');
     return saved ? parseInt(saved, 10) : 10;
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [fileType, setFileType] = useState<'image' | 'video'>('image');
   const [fileSize, setFileSize] = useState(0);
@@ -31,6 +33,7 @@ export const MediaLibraryView: React.FC<Props> = ({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      setSelectedFile(file);
       const isVideo = file.type.startsWith('video');
       setFileType(isVideo ? 'video' : 'image');
       setFileSize(file.size);
@@ -67,33 +70,67 @@ export const MediaLibraryView: React.FC<Props> = ({
         const isVideo = finalUrl.match(/\.(mp4|webm|m4v)(\?.*)?$/i) !== null;
         setFileType(isVideo ? 'video' : 'image');
       } else {
-        if (!filePreview) {
+        if (!selectedFile && !filePreview) {
           alert('Selecione um arquivo de foto ou vídeo.');
           setIsUploading(false);
           return;
         }
 
-        // Faz o upload para o servidor local que a TV alcança na rede
-        const serverHost = window.location.hostname || '192.168.1.11';
-        try {
-          const res = await fetch(`http://${serverHost}:8080/api/upload-media`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              base64: filePreview,
-              title: title.trim(),
-              type: fileType,
-              durationSeconds: duration
-            })
-          });
-          const resData = await res.json();
-          if (resData.url) {
-            finalUrl = resData.url;
-          } else {
-            finalUrl = filePreview;
+        // 1. Tenta Upload na Nuvem Global Supabase Storage
+        if (selectedFile && isSupabaseConfigured) {
+          try {
+            const cleanName = selectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const uniquePath = `uploads/${Date.now()}_${cleanName}`;
+
+            const { data: uploadData, error: uploadErr } = await supabase.storage
+              .from('media')
+              .upload(uniquePath, selectedFile, {
+                contentType: selectedFile.type,
+                upsert: true
+              });
+
+            if (!uploadErr && uploadData) {
+              const { data: urlData } = supabase.storage
+                .from('media')
+                .getPublicUrl(uniquePath);
+              if (urlData?.publicUrl) {
+                finalUrl = urlData.publicUrl;
+              }
+            } else if (uploadErr) {
+              console.warn('Supabase storage aviso:', uploadErr.message);
+            }
+          } catch (cloudErr) {
+            console.warn('Erro ao enviar para Supabase Storage:', cloudErr);
           }
-        } catch (err) {
-          console.warn('Falha no upload direto para porta 8080:', err);
+        }
+
+        // 2. Se o bucket da nuvem não estiver criado, tenta o servidor local como contingência
+        if (!finalUrl && filePreview) {
+          const serverHost = window.location.hostname || '192.168.1.11';
+          try {
+            const res = await fetch(`http://${serverHost}:8080/api/upload-media`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                base64: filePreview,
+                title: title.trim(),
+                type: fileType,
+                durationSeconds: duration
+              })
+            });
+            if (res.ok) {
+              const resData = await res.json();
+              if (resData.url) {
+                finalUrl = resData.url;
+              }
+            }
+          } catch (localErr) {
+            console.warn('Servidor local offline:', localErr);
+          }
+        }
+
+        // 3. Contingência base64 direta caso offline
+        if (!finalUrl && filePreview) {
           finalUrl = filePreview;
         }
       }
@@ -102,6 +139,7 @@ export const MediaLibraryView: React.FC<Props> = ({
       setTitle('');
       setUrlInput('');
       setFilePreview(null);
+      setSelectedFile(null);
       setShowModal(false);
     } finally {
       setIsUploading(false);
@@ -251,7 +289,7 @@ export const MediaLibraryView: React.FC<Props> = ({
             </p>
 
             {/* Alternador de Método: Arquivo vs Link */}
-            <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-simper-navy-deep p-1 rounded-2xl mb-4 border border-slate-200 dark:border-simper-navy-border">
+            <div className="grid grid-cols-2 gap-2 bg-slate-100 dark:bg-simper-navy-deep p-1 rounded-2xl mb-3 border border-slate-200 dark:border-simper-navy-border">
               <button
                 type="button"
                 onClick={() => setUploadMode('file')}
@@ -274,6 +312,11 @@ export const MediaLibraryView: React.FC<Props> = ({
               >
                 <Link2 className="w-3.5 h-3.5" /> Link da Web
               </button>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] mb-4">
+              <Cloud className="w-4 h-4 shrink-0" />
+              <span>Sincronização em Nuvem Global: suas mídias são acessadas pela TV em qualquer Wi-Fi ou 4G/5G.</span>
             </div>
 
             <form onSubmit={handleAddSubmit} className="space-y-4">

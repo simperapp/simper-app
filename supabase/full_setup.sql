@@ -88,6 +88,17 @@ CREATE POLICY "Acesso total publico devices" ON public.devices FOR ALL USING (tr
 CREATE POLICY "Acesso total publico playback_proofs" ON public.playback_proofs FOR ALL USING (true) WITH CHECK (true);
 
 -- ==============================================================================
+-- BUCKET DE MÍDIAS NO SUPABASE STORAGE (Para acesso e reprodução de qualquer Wi-Fi/4G)
+-- ==============================================================================
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES ('media', 'media', true, 52428800)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Public media access" ON storage.objects;
+CREATE POLICY "Public media access" ON storage.objects
+FOR ALL USING (bucket_id = 'media') WITH CHECK (bucket_id = 'media');
+
+-- ==============================================================================
 -- DADOS INICIAIS (SEED)
 -- ==============================================================================
 

@@ -77,11 +77,20 @@ export const SettingsView: React.FC<Props> = ({
   const [systemNotice, setSystemNotice] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
 
-  const sqlMigrationCode = `-- Adiciona colunas necessárias para controle de Play/Pause e Troca de Anúncios no Supabase
+  const sqlMigrationCode = `-- 1. Colunas para controle de Play/Pause e Troca de Anúncios no Supabase
 ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS transition VARCHAR(20) NOT NULL DEFAULT 'fade';
 ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS current_playlist_id UUID REFERENCES public.playlists(id) ON DELETE SET NULL;
 ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS current_media_index INT NOT NULL DEFAULT 0;
-ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS is_playing BOOLEAN NOT NULL DEFAULT true;`;
+ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS is_playing BOOLEAN NOT NULL DEFAULT true;
+
+-- 2. Bucket de Mídias Global no Supabase Storage (Acesso mundial via 4G/Wi-Fi)
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES ('media', 'media', true, 52428800)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 3. Permissões de Acesso Público para Upload e Download de Fotos/Vídeos
+CREATE POLICY "Public media access" ON storage.objects
+FOR ALL USING (bucket_id = 'media') WITH CHECK (bucket_id = 'media');`;
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(sqlMigrationCode);
@@ -629,11 +638,11 @@ ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS is_playing BOOLEAN NOT NULL 
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-simper-gold" />
                 <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                  Controle Remoto de Play/Pause & Troca de Anúncios na TV
+                  Controle Remoto e Armazenamento em Nuvem Global
                 </h4>
               </div>
               <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 max-w-xl">
-                Para que a Smart TV física responda imediatamente aos comandos de <strong>Pausar TV</strong> e <strong>Troca de Ordem</strong> enviados pelo painel, certifique-se de executar as 4 colunas no SQL Editor do Supabase.
+                Para que a Smart TV física responda a <strong>Pausar/Play</strong>, <strong>Troca de Ordem</strong> e receba fotos de <strong>qualquer Wi-Fi ou rede 4G</strong>, execute este script unificado no SQL Editor do Supabase.
               </p>
             </div>
 
@@ -653,7 +662,7 @@ ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS is_playing BOOLEAN NOT NULL 
               ) : (
                 <>
                   <Database className="w-3.5 h-3.5" />
-                  <span>Copiar SQL de Colunas</span>
+                  <span>Copiar SQL Unificado</span>
                 </>
               )}
             </button>

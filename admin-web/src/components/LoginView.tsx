@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, User, ArrowRight, ShieldCheck, AlertCircle, Sun, Moon } from 'lucide-react';
 import logoImg from '../assets/logo.png';
+import logoDarkImg from '../assets/logo_dark_theme.png';
 
 interface Props {
   onLoginSuccess: () => void;
@@ -38,14 +39,14 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess, darkMode = false, o
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 selection:bg-blue-600 selection:text-white font-sans relative transition-colors duration-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 dark:from-[#050A18] dark:via-[#091228] dark:to-[#030610] text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 selection:bg-blue-600 selection:text-white font-sans relative transition-colors duration-200">
       {/* Botão de Alternar Modo Claro / Escuro no Login */}
       {onToggleDarkMode && (
         <div className="absolute top-4 right-4">
           <button
             onClick={onToggleDarkMode}
             type="button"
-            className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
+            className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
             title={darkMode ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
           >
             {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
@@ -54,10 +55,10 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess, darkMode = false, o
       )}
 
       <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-10 shadow-sm transition-colors duration-200">
+        <div className="bg-white/90 dark:bg-[#0B1224]/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800 rounded-3xl p-8 sm:p-10 shadow-xl transition-colors duration-200">
           <div className="flex flex-col items-center text-center mb-8">
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 mb-4 shadow-2xs">
-              <img src={logoImg} alt="Simper" className="h-14 w-auto object-contain" />
+            <div className="p-3 bg-transparent mb-3">
+              <img src={darkMode ? logoDarkImg : logoImg} alt="Simper" className="h-16 w-auto object-contain drop-shadow-md" />
             </div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
               Painel de Gestão

@@ -4,6 +4,7 @@
 
 :root {
   --bg-page: #f8fafc;
+  --bg-page-gradient: linear-gradient(135deg, #f8fafc 0%, #eef2f6 50%, #e2e8f0 100%);
   --bg-card: #ffffff;
   --bg-card-subtle: #f1f5f9;
   --border-subtle: #e2e8f0;
@@ -18,6 +19,7 @@
 
 html.dark {
   --bg-page: #060b18;
+  --bg-page-gradient: radial-gradient(circle at 20% 20%, #0d1a3a 0%, #060b18 50%, #030712 100%);
   --bg-card: #0c1427;
   --bg-card-subtle: #101b37;
   --border-subtle: #1e2c4a;
@@ -32,12 +34,14 @@ html.dark {
 
 body {
   margin: 0;
-  background-color: var(--bg-page);
+  background: var(--bg-page-gradient);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  min-height: 100vh;
+  transition: background 0.3s ease, color 0.2s ease;
 }
 
 /* Custom scrollbars for clean SaaS UI */

@@ -29,7 +29,7 @@ interface Props {
 export const DashboardView: React.FC<Props> = ({
   devices,
   media,
-  playlists,
+  playlists: _playlists,
   onNextMedia,
   onPrevMedia,
   onTogglePlayPause,
@@ -44,19 +44,16 @@ export const DashboardView: React.FC<Props> = ({
   const activeDevice = devices.find(d => d.id === selectedDeviceId) || devices[0];
 
   const getActiveMediaForDevice = (device?: Device): MediaItem | null => {
-    if (!device) return null;
-    const pl = playlists.find(p => p.id === device.assigned_playlist_id) || playlists[0];
-    if (!pl || pl.media_ids.length === 0) return media[0] || null;
-    const activeMediaId = pl.media_ids[device.current_media_index % pl.media_ids.length];
-    return media.find(m => m.id === activeMediaId) || media[0] || null;
+    if (!device || media.length === 0) return null;
+    const count = media.length;
+    const idx = ((device.current_media_index ?? 0) % count + count) % count;
+    return media[idx] || media[0] || null;
   };
 
   const activeMedia = getActiveMediaForDevice(activeDevice);
 
-  const getMediaCountForDevice = (device?: Device): number => {
-    if (!device) return 1;
-    const pl = playlists.find(p => p.id === device.assigned_playlist_id);
-    return pl?.media_ids.length || media.length || 1;
+  const getMediaCountForDevice = (_device?: Device): number => {
+    return media.length || 1;
   };
 
   const totalCycleSeconds = media.reduce((acc, m) => acc + (m.duration_seconds || 10), 0);
@@ -368,7 +365,8 @@ export const DashboardView: React.FC<Props> = ({
             {/* GRADE INTERATIVA DE MÍDIAS COM ONCLICK */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {media.map((item, idx) => {
-                const isPlayingThis = activeMedia?.id === item.id;
+                const currentIdx = ((activeDevice?.current_media_index ?? 0) % (media.length || 1) + (media.length || 1)) % (media.length || 1);
+                const isPlayingThis = currentIdx === idx;
 
                 return (
                   <div

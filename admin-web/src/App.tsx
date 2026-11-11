@@ -24,6 +24,7 @@ import { MediaLibraryView } from './components/MediaLibraryView';
 import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
 import logoImg from './assets/logo.png';
+import logoDarkImg from './assets/logo_dark_theme.png';
 
 type Tab = 'dashboard' | 'tvs' | 'playlists' | 'media' | 'settings';
 
@@ -195,18 +196,22 @@ export function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#070C18] text-slate-900 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100/90 to-slate-200/70 dark:from-[#050A18] dark:via-[#091228] dark:to-[#030610] text-slate-900 dark:text-slate-100 flex flex-col md:flex-row font-sans transition-colors duration-200">
       
       {/* 1. SIDEBAR LATERAL FIXA (DESKTOP) */}
-      <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-[#0B1224] border-r border-slate-200 dark:border-simper-navy-border shrink-0 z-30 select-none">
+      <aside className="hidden md:flex flex-col w-64 bg-white/95 dark:bg-[#080E20]/95 backdrop-blur-2xl border-r border-slate-200/80 dark:border-simper-navy-border shrink-0 z-30 select-none shadow-xl">
         {/* Brand / Logo Area */}
-        <div className="h-20 px-6 flex items-center justify-between border-b border-slate-100 dark:border-simper-navy-border/60">
+        <div className="h-20 px-5 flex items-center justify-between border-b border-slate-100 dark:border-simper-navy-border/60">
           <div 
             onClick={() => setActiveTab('dashboard')} 
-            className="flex items-center gap-3 cursor-pointer group"
+            className="flex items-center gap-2.5 cursor-pointer group py-1"
             title="Ir para o Dashboard"
           >
-            <img src={logoImg} alt="Simper" className="h-9 w-auto object-contain transition-transform group-hover:scale-105" />
+            <img 
+              src={darkMode ? logoDarkImg : logoImg} 
+              alt="Simper" 
+              className="h-10 w-auto max-w-[150px] object-contain transition-transform group-hover:scale-105 drop-shadow-xs" 
+            />
             <span className="text-[10px] font-mono font-extrabold bg-simper-gold/15 text-simper-gold border border-simper-gold/30 px-1.5 py-0.5 rounded uppercase tracking-wider">
               PRO
             </span>
@@ -334,9 +339,9 @@ export function App() {
       </aside>
 
       {/* 2. HEADER MOBILE (CELULAR / TABLET) */}
-      <header className="md:hidden bg-white dark:bg-[#0B1224] border-b border-slate-200 dark:border-simper-navy-border px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-xs">
-        <div className="flex items-center gap-2.5">
-          <img src={logoImg} alt="Simper" className="h-7 w-auto object-contain" />
+      <header className="md:hidden bg-white/95 dark:bg-[#080E20]/95 backdrop-blur-md border-b border-slate-200 dark:border-simper-navy-border px-4 py-3 flex items-center justify-between sticky top-0 z-40 shadow-xs">
+        <div className="flex items-center gap-2">
+          <img src={darkMode ? logoDarkImg : logoImg} alt="Simper" className="h-8 w-auto object-contain" />
           <span className="text-[10px] font-mono font-bold bg-simper-gold/15 text-simper-gold px-1.5 py-0.2 rounded uppercase">
             PRO
           </span>

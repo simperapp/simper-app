@@ -75,39 +75,21 @@ const initialPlaylists: Playlist[] = [
 
 const initialDevices: Device[] = [
   {
-    id: 'c0000000-0000-0000-0000-000000000001',
-    pairing_code: 'SMP782',
-    name: 'TV Recepção Aiwa 32" (Horizontal)',
+    id: 'edbc6a0c-b469-4859-b00c-3885133d290e',
+    pairing_code: 'SMPX5S',
+    name: 'TV Aiwa 32 (SMPX5S)',
     location: 'Hall de Entrada',
     status: 'online',
-    orientation: 'landscape',
-    rotation_degrees: 0,
+    orientation: 'portrait',
+    rotation_degrees: 90,
     screen_resolution: '1366x768',
-    assigned_playlist_id: 'b0000000-0000-0000-0000-000000000001',
+    assigned_playlist_id: '',
     transition_type: 'fade',
     playback_state: 'playing',
     current_media_index: 0,
     last_ping: new Date().toISOString(),
-    storage_free_mb: 2840,
-    storage_total_mb: 4096,
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'c0000000-0000-0000-0000-000000000002',
-    pairing_code: 'SMP914',
-    name: 'Totem Corredor (Vertical)',
-    location: 'Praça de Alimentação',
-    status: 'online',
-    orientation: 'portrait',
-    rotation_degrees: 90,
-    screen_resolution: '768x1366',
-    assigned_playlist_id: 'b0000000-0000-0000-0000-000000000001',
-    transition_type: 'slide',
-    playback_state: 'playing',
-    current_media_index: 1,
-    last_ping: new Date().toISOString(),
-    storage_free_mb: 3120,
-    storage_total_mb: 4096,
+    storage_free_mb: 1982,
+    storage_total_mb: 4107,
     created_at: new Date().toISOString()
   }
 ];
@@ -271,9 +253,8 @@ export const api = {
       if (updates.playback_state !== undefined) payload.is_playing = updates.playback_state === 'playing';
 
       safeRemote(async () => {
-        if (target?.pairing_code) {
-          await supabase.from('devices').update(payload).eq('pairing_code', target.pairing_code);
-        }
+        const code = target?.pairing_code || 'SMPX5S';
+        await supabase.from('devices').update(payload).eq('pairing_code', code);
         await supabase.from('devices').update(payload).eq('id', id);
       });
     }
@@ -296,9 +277,8 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        if (target?.pairing_code) {
-          await supabase.from('devices').update({ current_media_index: nextIdx }).eq('pairing_code', target.pairing_code);
-        }
+        const code = target?.pairing_code || 'SMPX5S';
+        await supabase.from('devices').update({ current_media_index: nextIdx }).eq('pairing_code', code);
         await supabase.from('devices').update({ current_media_index: nextIdx }).eq('id', deviceId);
       });
     }
@@ -320,9 +300,8 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        if (target?.pairing_code) {
-          await supabase.from('devices').update({ current_media_index: prevIdx }).eq('pairing_code', target.pairing_code);
-        }
+        const code = target?.pairing_code || 'SMPX5S';
+        await supabase.from('devices').update({ current_media_index: prevIdx }).eq('pairing_code', code);
         await supabase.from('devices').update({ current_media_index: prevIdx }).eq('id', deviceId);
       });
     }
@@ -342,9 +321,8 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        if (target?.pairing_code) {
-          await supabase.from('devices').update({ current_media_index: targetIndex }).eq('pairing_code', target.pairing_code);
-        }
+        const code = target?.pairing_code || 'SMPX5S';
+        await supabase.from('devices').update({ current_media_index: targetIndex }).eq('pairing_code', code);
         await supabase.from('devices').update({ current_media_index: targetIndex }).eq('id', deviceId);
       });
     }
@@ -366,9 +344,8 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        if (target?.pairing_code) {
-          await supabase.from('devices').update({ is_playing: isPlaying }).eq('pairing_code', target.pairing_code);
-        }
+        const code = target?.pairing_code || 'SMPX5S';
+        await supabase.from('devices').update({ is_playing: isPlaying }).eq('pairing_code', code);
         await supabase.from('devices').update({ is_playing: isPlaying }).eq('id', deviceId);
       });
     }

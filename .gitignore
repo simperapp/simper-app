@@ -1,0 +1,17 @@
+# Node / Web
+**/node_modules/
+**/dist/
+.env
+.env.local
+
+# Android / Gradle
+**/.gradle/
+**/build/
+local.properties
+
+# IDE & OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

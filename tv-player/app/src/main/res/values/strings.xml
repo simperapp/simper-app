@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Simper TV</string>
+    <string name="pairing_title">Conectar este dispositivo</string>
+    <string name="pairing_instruction">Acesse o painel simper.app e insira o código abaixo para vincular esta televisão:</string>
+    <string name="pairing_code_placeholder">------</string>
+    <string name="status_waiting_content">Aguardando programação ser enviada...</string>
+    <string name="status_offline">Modo Offline - Reproduzindo cache local</string>
+</resources>

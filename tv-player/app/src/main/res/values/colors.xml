@@ -1,0 +1,11 @@
+<resources>
+    <!-- Simper.app Identity: Deep Navy and Metallic Gold -->
+    <color name="simper_navy_dark">#0A1128</color>
+    <color name="simper_navy_card">#131F3D</color>
+    <color name="simper_navy_light">#1C2D5A</color>
+    <color name="simper_gold">#D4AF37</color>
+    <color name="simper_gold_light">#F3E5AB</color>
+    <color name="simper_white">#FFFFFF</color>
+    <color name="simper_gray_text">#94A3B8</color>
+    <color name="simper_black">#000000</color>
+</resources>

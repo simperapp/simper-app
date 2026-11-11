@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/simper_navy_dark">
+
+    <!-- Container de Reprodução (ExoPlayer e Imagens) -->
+    <FrameLayout
+        android:id="@+id/playerContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <!-- ExoPlayer PlayerView -->
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/playerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:resize_mode="zoom"
+            android:background="@color/simper_black" />
+
+        <!-- ImageView para anúncios estáticos (Preenche 100% da tela) -->
+        <ImageView
+            android:id="@+id/mediaImageView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/app_name"
+            android:visibility="gone" />
+
+        <!-- Overlay discreto de status da TV (Oculto por padrão, aparece apenas ao apertar OK) -->
+        <LinearLayout
+            android:id="@+id/playerOverlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:background="#B30A1128"
+            android:paddingStart="12dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/simper_logo"
+                android:layout_marginEnd="6dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SIMPER | TV: "
+                android:textColor="@color/simper_gray_text"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/overlayCodeText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SMP782"
+                android:textColor="@color/simper_gold"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=" (Aperte OK p/ Menu)"
+                android:textColor="@color/simper_gray_text"
+                android:textSize="10sp"
+                android:layout_marginStart="4dp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Tela Inicial de Pareamento / Boas-Vindas -->
+    <LinearLayout
+        android:id="@+id/pairingContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="32dp"
+        android:visibility="visible">
+
+        <!-- Logo Oficial Simper -->
+        <ImageView
+            android:layout_width="180dp"
+            android:layout_height="180dp"
+            android:src="@drawable/simper_logo"
+            android:scaleType="fitCenter"
+            android:layout_marginBottom="16dp"
+            android:contentDescription="Simper Logo" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Plataforma de Publicidade Digital (Digital Signage)"
+            android:textColor="@color/simper_gray_text"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="CÓDIGO DE VINCULAÇÃO DESTA SMART TV:"
+            android:textColor="@color/simper_white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.05"
+            android:layout_marginBottom="10dp" />
+
+        <!-- Cartão de Código de Pareamento -->
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@color/simper_navy_card"
+            android:paddingStart="48dp"
+            android:paddingTop="20dp"
+            android:paddingEnd="48dp"
+            android:paddingBottom="20dp"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:id="@+id/pairingCodeText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SMP782"
+                android:textColor="@color/simper_gold"
+                android:textSize="52sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.25" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="1. Acesse o painel no computador ou celular\n2. Clique em '+ Vincular TV' e digite o código acima"
+            android:textColor="@color/simper_gray_text"
+            android:textSize="15sp"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Dica de controle remoto -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="[ Pressione OK no controle remoto para iniciar/pausar demonstração ]"
+            android:textColor="@color/simper_gold"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+</FrameLayout>

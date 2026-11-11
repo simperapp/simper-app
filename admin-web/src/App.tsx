@@ -7,7 +7,8 @@ import {
   Moon,
   LayoutDashboard,
   LogOut,
-  UserCheck
+  UserCheck,
+  Settings
 } from 'lucide-react';
 import { api } from './services/api';
 import type { Device, MediaItem, Playlist, TransitionType } from './types/database';
@@ -16,10 +17,11 @@ import { DashboardView } from './components/DashboardView';
 import { DevicesView } from './components/DevicesView';
 import { PlaylistsView } from './components/PlaylistsView';
 import { MediaLibraryView } from './components/MediaLibraryView';
+import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
 import logoImg from './assets/logo.png';
 
-type Tab = 'dashboard' | 'tvs' | 'playlists' | 'media';
+type Tab = 'dashboard' | 'tvs' | 'playlists' | 'media' | 'settings';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -34,10 +36,17 @@ export function App() {
   });
 
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  
+  // Nome do Administrador customizável na aba Configurações
+  const [adminName, setAdminName] = useState<string>(() => {
+    return localStorage.getItem('simper_admin_name') || 'dono';
+  });
+
+  // Tema inicial com persistência e detecção de SO
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('simper_theme');
     if (saved) return saved === 'dark';
-    return false; // Padrão: Modo Claro (Branco profissional)
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
   const [devices, setDevices] = useState<Device[]>([]);
@@ -58,16 +67,25 @@ export function App() {
     return () => unsubscribe();
   }, [isAuthenticated]);
 
-  // Alterna classe 'dark' no elemento raiz HTML e persiste a escolha
-  useEffect(() => {
-    if (darkMode) {
+  // Aplicação estrita do tema em toda a hierarquia HTML
+  const applyTheme = (isDark: boolean) => {
+    setDarkMode(isDark);
+    if (isDark) {
       document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.style.colorScheme = 'dark';
       localStorage.setItem('simper_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      document.documentElement.setAttribute('data-theme', 'light');
+      document.documentElement.style.colorScheme = 'light';
       localStorage.setItem('simper_theme', 'light');
     }
-  }, [darkMode]);
+  };
+
+  useEffect(() => {
+    applyTheme(darkMode);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('simper_session');
@@ -80,7 +98,7 @@ export function App() {
       <LoginView 
         onLoginSuccess={() => setIsAuthenticated(true)} 
         darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onToggleDarkMode={() => applyTheme(!darkMode)}
       />
     );
   }
@@ -159,60 +177,76 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 dark:bg-simper-navy-deep text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* Top Navbar */}
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 shadow-xs">
+      <header className="bg-white dark:bg-simper-navy-card border-b border-slate-200 dark:border-simper-navy-border sticky top-0 z-40 shadow-xs backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-6 lg:gap-8">
             {/* Logo Oficial Simper */}
             <div 
               onClick={() => setActiveTab('dashboard')} 
-              className="flex items-center gap-3 cursor-pointer select-none py-1"
+              className="flex items-center gap-3 cursor-pointer select-none py-1 group"
+              title="Voltar ao Dashboard"
             >
-              <img src={logoImg} alt="Simper" className="h-9 w-auto object-contain" />
+              <img src={logoImg} alt="Simper" className="h-9 w-auto object-contain transition-transform group-hover:scale-105" />
             </div>
 
-            {/* Nav Tabs */}
-            <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-semibold">
+            {/* Nav Tabs Desktop */}
+            <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-simper-navy-deep p-1 rounded-2xl border border-slate-200 dark:border-simper-navy-border text-xs font-semibold">
               <button
                 onClick={() => setActiveTab('dashboard')}
                 className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'dashboard'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                    ? 'bg-white dark:bg-simper-navy-card text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/50 dark:border-simper-gold/30'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <LayoutDashboard className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Dashboard
+                <LayoutDashboard className={`w-3.5 h-3.5 ${activeTab === 'dashboard' ? 'text-simper-gold' : ''}`} /> 
+                <span>Dashboard</span>
               </button>
               <button
                 onClick={() => setActiveTab('tvs')}
                 className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'tvs'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                    ? 'bg-white dark:bg-simper-navy-card text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/50 dark:border-simper-gold/30'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Tv className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Smart TVs ({devices.length})
+                <Tv className={`w-3.5 h-3.5 ${activeTab === 'tvs' ? 'text-simper-gold' : ''}`} /> 
+                <span>Smart TVs ({devices.length})</span>
               </button>
               <button
                 onClick={() => setActiveTab('playlists')}
                 className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'playlists'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                    ? 'bg-white dark:bg-simper-navy-card text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/50 dark:border-simper-gold/30'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <ListVideo className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Playlists ({playlists.length})
+                <ListVideo className={`w-3.5 h-3.5 ${activeTab === 'playlists' ? 'text-simper-gold' : ''}`} /> 
+                <span>Playlists ({playlists.length})</span>
               </button>
               <button
                 onClick={() => setActiveTab('media')}
                 className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'media'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-bold'
+                    ? 'bg-white dark:bg-simper-navy-card text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/50 dark:border-simper-gold/30'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                <Film className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" /> Mídias ({media.length})
+                <Film className={`w-3.5 h-3.5 ${activeTab === 'media' ? 'text-simper-gold' : ''}`} /> 
+                <span>Mídias ({media.length})</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'settings'
+                    ? 'bg-white dark:bg-simper-navy-card text-slate-900 dark:text-white shadow-xs font-bold border border-slate-200/50 dark:border-simper-gold/30'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Settings className={`w-3.5 h-3.5 ${activeTab === 'settings' ? 'text-simper-gold' : ''}`} /> 
+                <span>Configurações</span>
               </button>
             </nav>
           </div>
@@ -220,24 +254,28 @@ export function App() {
           {/* Right: User Status, Dark Mode Toggle & Logout */}
           <div className="flex items-center gap-3">
             {/* Status Nuvem */}
-            <span className="hidden lg:inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+            <span className="hidden lg:inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-simper-navy-deep px-3 py-1.5 rounded-xl border border-slate-200 dark:border-simper-navy-border">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Nuvem Ativa
             </span>
 
-            {/* Alternador de Modo Claro / Escuro */}
+            {/* Alternador de Modo Claro / Escuro Global */}
             <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shadow-2xs cursor-pointer"
-              title={darkMode ? 'Mudar para Modo Claro (Branco)' : 'Mudar para Modo Escuro'}
+              onClick={() => applyTheme(!darkMode)}
+              className="p-2 rounded-xl bg-slate-50 dark:bg-simper-navy-deep border border-slate-200 dark:border-simper-navy-border text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-2xs cursor-pointer"
+              title={darkMode ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
             >
               {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
             </button>
 
-            {/* Usuário Dono */}
-            <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
-                <UserCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span>dono</span>
+            {/* Usuário Administrador */}
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-simper-navy-border">
+              <div 
+                onClick={() => setActiveTab('settings')}
+                className="flex items-center gap-1.5 bg-slate-100 dark:bg-simper-navy-deep text-slate-800 dark:text-slate-200 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-simper-navy-border text-xs font-bold cursor-pointer hover:border-simper-gold/50 transition-colors"
+                title="Configurações do Perfil"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-simper-gold" />
+                <span className="capitalize truncate max-w-[100px]">{adminName}</span>
               </div>
 
               {/* Botão Sair */}
@@ -253,11 +291,12 @@ export function App() {
         </div>
 
         {/* Mobile Navigation */}
-        <div className="md:hidden flex items-center overflow-x-auto px-4 py-2 gap-2 border-t border-slate-200 dark:border-slate-800 text-xs font-bold">
-          <button onClick={() => setActiveTab('dashboard')} className={`px-3 py-1.5 rounded-lg ${activeTab === 'dashboard' ? 'bg-slate-900 text-white' : 'text-slate-600 dark:text-slate-300'}`}>Dashboard</button>
-          <button onClick={() => setActiveTab('tvs')} className={`px-3 py-1.5 rounded-lg ${activeTab === 'tvs' ? 'bg-slate-900 text-white' : 'text-slate-600 dark:text-slate-300'}`}>Smart TVs</button>
-          <button onClick={() => setActiveTab('playlists')} className={`px-3 py-1.5 rounded-lg ${activeTab === 'playlists' ? 'bg-slate-900 text-white' : 'text-slate-600 dark:text-slate-300'}`}>Playlists</button>
-          <button onClick={() => setActiveTab('media')} className={`px-3 py-1.5 rounded-lg ${activeTab === 'media' ? 'bg-slate-900 text-white' : 'text-slate-600 dark:text-slate-300'}`}>Mídias</button>
+        <div className="md:hidden flex items-center overflow-x-auto px-4 py-2 gap-2 border-t border-slate-200 dark:border-simper-navy-border text-xs font-bold">
+          <button onClick={() => setActiveTab('dashboard')} className={`px-3 py-1.5 rounded-lg shrink-0 ${activeTab === 'dashboard' ? 'bg-slate-900 text-white dark:bg-simper-gold dark:text-slate-950' : 'text-slate-600 dark:text-slate-300'}`}>Dashboard</button>
+          <button onClick={() => setActiveTab('tvs')} className={`px-3 py-1.5 rounded-lg shrink-0 ${activeTab === 'tvs' ? 'bg-slate-900 text-white dark:bg-simper-gold dark:text-slate-950' : 'text-slate-600 dark:text-slate-300'}`}>Smart TVs</button>
+          <button onClick={() => setActiveTab('playlists')} className={`px-3 py-1.5 rounded-lg shrink-0 ${activeTab === 'playlists' ? 'bg-slate-900 text-white dark:bg-simper-gold dark:text-slate-950' : 'text-slate-600 dark:text-slate-300'}`}>Playlists</button>
+          <button onClick={() => setActiveTab('media')} className={`px-3 py-1.5 rounded-lg shrink-0 ${activeTab === 'media' ? 'bg-slate-900 text-white dark:bg-simper-gold dark:text-slate-950' : 'text-slate-600 dark:text-slate-300'}`}>Mídias</button>
+          <button onClick={() => setActiveTab('settings')} className={`px-3 py-1.5 rounded-lg shrink-0 ${activeTab === 'settings' ? 'bg-slate-900 text-white dark:bg-simper-gold dark:text-slate-950' : 'text-slate-600 dark:text-slate-300'}`}>Configurações</button>
         </div>
       </header>
 
@@ -305,15 +344,32 @@ export function App() {
             onUpdateDuration={handleUpdateDuration}
           />
         )}
+
+        {activeTab === 'settings' && (
+          <SettingsView
+            darkMode={darkMode}
+            onThemeChange={applyTheme}
+            devices={devices}
+            media={media}
+            playlists={playlists}
+            onForceSync={() => {
+              api.syncWithSupabase();
+              loadData();
+            }}
+            adminName={adminName}
+            onAdminNameChange={(newName) => setAdminName(newName)}
+          />
+        )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 mt-auto">
+      <footer className="border-t border-slate-200 dark:border-simper-navy-border py-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-simper-navy-card mt-auto">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p className="font-medium text-slate-600 dark:text-slate-400">
             Simper Sistemas &copy; {new Date().getFullYear()} — Plataforma de Mídia Indoor
           </p>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-simper-gold" />
             Terminais e Totens Verticais em Alta Resolução
           </span>
         </div>

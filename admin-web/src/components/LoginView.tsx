@@ -22,8 +22,9 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess, darkMode = false, o
     setTimeout(() => {
       const cleanUser = username.trim().toLowerCase();
       const cleanPass = password.trim();
+      const expectedPass = localStorage.getItem('simper_custom_password') || '1491';
 
-      if (cleanUser === 'dono' && cleanPass === '1491') {
+      if (cleanUser === 'dono' && cleanPass === expectedPass) {
         localStorage.setItem('simper_session', JSON.stringify({
           user: 'dono',
           timestamp: Date.now()
@@ -88,7 +89,7 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess, darkMode = false, o
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="dono"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-3.5 py-2.5 text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-3.5 py-2.5 text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-simper-gold focus:border-transparent transition-all"
                   autoFocus
                 />
               </div>
@@ -108,7 +109,7 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess, darkMode = false, o
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-3.5 py-2.5 text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-3.5 py-2.5 text-sm font-medium text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-simper-gold focus:border-transparent transition-all"
                 />
               </div>
             </div>
@@ -116,7 +117,7 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess, darkMode = false, o
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="w-full mt-2 bg-slate-900 hover:bg-slate-800 dark:bg-simper-gold dark:hover:bg-simper-gold-hover text-white dark:text-slate-950 font-bold py-3 rounded-xl text-sm transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               {isLoading ? (
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

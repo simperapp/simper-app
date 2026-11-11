@@ -34,7 +34,11 @@ export function App() {
   });
 
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [darkMode, setDarkMode] = useState<boolean>(false); // Padrão: Modo Claro (Branco profissional)
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('simper_theme');
+    if (saved) return saved === 'dark';
+    return false; // Padrão: Modo Claro (Branco profissional)
+  });
 
   const [devices, setDevices] = useState<Device[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -54,12 +58,14 @@ export function App() {
     return () => unsubscribe();
   }, [isAuthenticated]);
 
-  // Alterna classe 'dark' no elemento raiz HTML
+  // Alterna classe 'dark' no elemento raiz HTML e persiste a escolha
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('simper_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('simper_theme', 'light');
     }
   }, [darkMode]);
 
@@ -70,7 +76,13 @@ export function App() {
 
   // Se não estiver logado, exibe a tela de login
   if (!isAuthenticated) {
-    return <LoginView onLoginSuccess={() => setIsAuthenticated(true)} />;
+    return (
+      <LoginView 
+        onLoginSuccess={() => setIsAuthenticated(true)} 
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+      />
+    );
   }
 
   // Controles de TVs

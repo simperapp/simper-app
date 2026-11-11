@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Lock, User, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Lock, User, ArrowRight, ShieldCheck, AlertCircle, Sun, Moon } from 'lucide-react';
 import logoImg from '../assets/logo.png';
 
 interface Props {
   onLoginSuccess: () => void;
+  darkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
-export const LoginView: React.FC<Props> = ({ onLoginSuccess }) => {
+export const LoginView: React.FC<Props> = ({ onLoginSuccess, darkMode = false, onToggleDarkMode }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -35,12 +37,26 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col justify-center items-center p-4 selection:bg-blue-600 selection:text-white font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 selection:bg-blue-600 selection:text-white font-sans relative transition-colors duration-200">
+      {/* Botão de Alternar Modo Claro / Escuro no Login */}
+      {onToggleDarkMode && (
+        <div className="absolute top-4 right-4">
+          <button
+            onClick={onToggleDarkMode}
+            type="button"
+            className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-xs transition-colors cursor-pointer"
+            title={darkMode ? 'Mudar para Modo Claro' : 'Mudar para Modo Escuro'}
+          >
+            {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+          </button>
+        </div>
+      )}
+
       <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-10 shadow-xl">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-10 shadow-sm transition-colors duration-200">
           <div className="flex flex-col items-center text-center mb-8">
-            <div className="p-3 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 mb-4 shadow-sm">
-              <img src={logoImg} alt="Simper" className="h-16 w-auto object-contain" />
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 mb-4 shadow-2xs">
+              <img src={logoImg} alt="Simper" className="h-14 w-auto object-contain" />
             </div>
             <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
               Painel de Gestão
@@ -59,7 +75,7 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess }) => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Usuário
               </label>
               <div className="relative">
@@ -79,7 +95,7 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess }) => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Senha
               </label>
               <div className="relative">
@@ -100,7 +116,7 @@ export const LoginView: React.FC<Props> = ({ onLoginSuccess }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-xs flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               {isLoading ? (
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

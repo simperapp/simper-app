@@ -62,7 +62,7 @@ export const DevicesView: React.FC<Props> = ({
 
         <button
           onClick={() => setShowModal(true)}
-          className="bg-slate-900 dark:bg-simper-gold hover:bg-slate-800 dark:hover:bg-simper-gold-hover text-white dark:text-slate-950 px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-sm transition-all self-start sm:self-auto"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-semibold text-xs flex items-center gap-2 shadow-xs transition-all self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Cadastrar Nova TV
         </button>

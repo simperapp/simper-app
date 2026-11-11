@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tv, Plus, Trash2, Sliders, Check, Smartphone, X } from 'lucide-react';
+import { Tv, Plus, Trash2, Sliders, Check, Smartphone, X, Play, Pause } from 'lucide-react';
 import type { Device, Playlist, TransitionType } from '../types/database';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   onUpdateTransition: (id: string, transition: TransitionType) => void;
   onAssignPlaylist: (id: string, playlistId: string) => void;
   onUpdateRotation: (id: string, orientation: 'landscape' | 'portrait', rotation: 0 | 90 | 180 | 270) => void;
+  onTogglePlayPause?: (id: string) => void;
 }
 
 export const DevicesView: React.FC<Props> = ({
@@ -19,7 +20,8 @@ export const DevicesView: React.FC<Props> = ({
   onDeleteDevice,
   onUpdateTransition,
   onAssignPlaylist,
-  onUpdateRotation
+  onUpdateRotation,
+  onTogglePlayPause
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [code, setCode] = useState('');
@@ -221,11 +223,37 @@ export const DevicesView: React.FC<Props> = ({
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-simper-navy-border flex items-center justify-between text-xs text-slate-400">
-                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /> Sincronizada via Nuvem
+              <div className="mt-6 pt-4 border-t border-slate-100 dark:border-simper-navy-border flex items-center justify-between gap-2 text-xs text-slate-400">
+                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold truncate">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" /> Nuvem Ativa
                 </span>
-                <span>{device.screen_resolution}</span>
+                
+                <div className="flex items-center gap-2">
+                  {onTogglePlayPause && (
+                    <button
+                      onClick={() => onTogglePlayPause(device.id)}
+                      title={device.playback_state === 'playing' ? 'Pausar Reprodução' : 'Iniciar Reprodução'}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all text-white cursor-pointer shadow-xs ${
+                        device.playback_state === 'playing' 
+                          ? 'bg-amber-600 hover:bg-amber-700' 
+                          : 'bg-emerald-600 hover:bg-emerald-700'
+                      }`}
+                    >
+                      {device.playback_state === 'playing' ? (
+                        <>
+                          <Pause className="w-3.5 h-3.5 fill-white" />
+                          <span>Pausar</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5 fill-white" />
+                          <span>Play</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <span className="hidden sm:inline font-mono">{device.screen_resolution}</span>
+                </div>
               </div>
             </div>
           ))}

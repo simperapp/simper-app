@@ -256,6 +256,7 @@ export const api = {
 
   updateDeviceConfig(id: string, updates: Partial<Device>): void {
     const devices = this.getDevices();
+    const target = devices.find(d => d.id === id);
     const updated = devices.map(d => d.id === id ? { ...d, ...updates } : d);
     setStored('devices', updated);
     this.notify();
@@ -269,13 +270,19 @@ export const api = {
       if (updates.current_media_index !== undefined) payload.current_media_index = updates.current_media_index;
       if (updates.playback_state !== undefined) payload.is_playing = updates.playback_state === 'playing';
 
-      safeRemote(() => supabase.from('devices').update(payload).eq('id', id));
+      safeRemote(async () => {
+        if (target?.pairing_code) {
+          await supabase.from('devices').update(payload).eq('pairing_code', target.pairing_code);
+        }
+        await supabase.from('devices').update(payload).eq('id', id);
+      });
     }
   },
 
   // CONTROLES DE REPRODUÇÃO EM TEMPO REAL
   nextMedia(deviceId: string, maxItems: number): void {
     const devices = this.getDevices();
+    const target = devices.find(d => d.id === deviceId);
     let nextIdx = 0;
     const updated = devices.map(d => {
       if (d.id === deviceId) {
@@ -288,12 +295,18 @@ export const api = {
     this.notify();
 
     if (isSupabaseConfigured) {
-      safeRemote(() => supabase.from('devices').update({ current_media_index: nextIdx }).eq('id', deviceId));
+      safeRemote(async () => {
+        if (target?.pairing_code) {
+          await supabase.from('devices').update({ current_media_index: nextIdx }).eq('pairing_code', target.pairing_code);
+        }
+        await supabase.from('devices').update({ current_media_index: nextIdx }).eq('id', deviceId);
+      });
     }
   },
 
   prevMedia(deviceId: string, maxItems: number): void {
     const devices = this.getDevices();
+    const target = devices.find(d => d.id === deviceId);
     let prevIdx = 0;
     const updated = devices.map(d => {
       if (d.id === deviceId) {
@@ -306,12 +319,40 @@ export const api = {
     this.notify();
 
     if (isSupabaseConfigured) {
-      safeRemote(() => supabase.from('devices').update({ current_media_index: prevIdx }).eq('id', deviceId));
+      safeRemote(async () => {
+        if (target?.pairing_code) {
+          await supabase.from('devices').update({ current_media_index: prevIdx }).eq('pairing_code', target.pairing_code);
+        }
+        await supabase.from('devices').update({ current_media_index: prevIdx }).eq('id', deviceId);
+      });
+    }
+  },
+
+  skipToMedia(deviceId: string, targetIndex: number): void {
+    const devices = this.getDevices();
+    const target = devices.find(d => d.id === deviceId);
+    const updated = devices.map(d => {
+      if (d.id === deviceId) {
+        return { ...d, current_media_index: targetIndex };
+      }
+      return d;
+    });
+    setStored('devices', updated);
+    this.notify();
+
+    if (isSupabaseConfigured) {
+      safeRemote(async () => {
+        if (target?.pairing_code) {
+          await supabase.from('devices').update({ current_media_index: targetIndex }).eq('pairing_code', target.pairing_code);
+        }
+        await supabase.from('devices').update({ current_media_index: targetIndex }).eq('id', deviceId);
+      });
     }
   },
 
   togglePlayPause(deviceId: string): void {
     const devices = this.getDevices();
+    const target = devices.find(d => d.id === deviceId);
     let isPlaying = true;
     const updated = devices.map(d => {
       if (d.id === deviceId) {
@@ -324,7 +365,12 @@ export const api = {
     this.notify();
 
     if (isSupabaseConfigured) {
-      safeRemote(() => supabase.from('devices').update({ is_playing: isPlaying }).eq('id', deviceId));
+      safeRemote(async () => {
+        if (target?.pairing_code) {
+          await supabase.from('devices').update({ is_playing: isPlaying }).eq('pairing_code', target.pairing_code);
+        }
+        await supabase.from('devices').update({ is_playing: isPlaying }).eq('id', deviceId);
+      });
     }
   },
 

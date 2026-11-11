@@ -75,6 +75,19 @@ export const SettingsView: React.FC<Props> = ({
   const [isPinging, setIsPinging] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toLocaleTimeString('pt-BR'));
   const [systemNotice, setSystemNotice] = useState<string | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  const sqlMigrationCode = `-- Adiciona colunas necessárias para controle de Play/Pause e Troca de Anúncios no Supabase
+ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS transition VARCHAR(20) NOT NULL DEFAULT 'fade';
+ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS current_playlist_id UUID REFERENCES public.playlists(id) ON DELETE SET NULL;
+ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS current_media_index INT NOT NULL DEFAULT 0;
+ALTER TABLE public.devices ADD COLUMN IF NOT EXISTS is_playing BOOLEAN NOT NULL DEFAULT true;`;
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(sqlMigrationCode);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
 
   // Manipulador de Tema
   const handleSelectTheme = (mode: 'light' | 'dark' | 'system') => {
@@ -607,6 +620,48 @@ export const SettingsView: React.FC<Props> = ({
             <Radio className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin' : ''}`} />
             <span>{isPinging ? 'Testando...' : 'Testar Conexão em Tempo Real'}</span>
           </button>
+        </div>
+
+        {/* Card de Sincronização do Controle Remoto (Play/Pause e Troca de Anúncios na TV) */}
+        <div className="mt-4 p-5 rounded-2xl bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/30">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-simper-gold" />
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                  Controle Remoto de Play/Pause & Troca de Anúncios na TV
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 max-w-xl">
+                Para que a Smart TV física responda imediatamente aos comandos de <strong>Pausar TV</strong> e <strong>Troca de Ordem</strong> enviados pelo painel, certifique-se de executar as 4 colunas no SQL Editor do Supabase.
+              </p>
+            </div>
+
+            <button
+              onClick={handleCopySql}
+              className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer self-start sm:self-auto shrink-0 shadow-xs ${
+                copiedSql
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-900 hover:bg-slate-800 dark:bg-simper-gold dark:hover:bg-simper-gold-hover text-white dark:text-slate-950'
+              }`}
+            >
+              {copiedSql ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Copiado com Sucesso!</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Copiar SQL de Colunas</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <pre className="mt-3 p-3 rounded-xl bg-slate-900 text-slate-200 text-[10px] font-mono overflow-x-auto border border-slate-800 select-all">
+            {sqlMigrationCode}
+          </pre>
         </div>
       </section>
     </div>

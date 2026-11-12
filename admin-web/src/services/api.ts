@@ -28,46 +28,56 @@ async function safeRemote(fn: () => PromiseLike<any> | Promise<any>): Promise<vo
   }
 }
 
-// Mídias iniciais padrão
+// Mídias iniciais padrão sincronizadas com a nuvem
 const initialMedia: MediaItem[] = [
   {
-    id: 'a0000000-0000-0000-0000-000000000001',
-    title: 'Menu Especial Pratos Gourmet',
+    id: '508dadac-c3ad-4475-9ed0-624fc9c091d7',
+    title: 'Anuncie sua empresa com a Simper',
     type: 'image',
-    url: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=1280&auto=format&fit=crop&q=80',
-    file_size_bytes: 420000,
+    url: 'https://raw.githubusercontent.com/simperapp/simper-app/main/admin-web/public/media/foto_tv_1794361335533.jpg',
+    file_size_bytes: 1619675,
     duration_seconds: 10,
-    created_at: new Date().toISOString()
+    created_at: '2026-11-11T01:42:20.759125+00:00'
   },
   {
-    id: 'a0000000-0000-0000-0000-000000000002',
-    title: 'Bebidas & Drinks Especiais',
+    id: '7f4e60e7-ad32-4875-b978-c4b02fa1eee6',
+    title: 'Lua Nova Importados_ Visite Nossa Loja',
     type: 'image',
-    url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1280&auto=format&fit=crop&q=80',
-    file_size_bytes: 380000,
-    duration_seconds: 8,
-    created_at: new Date().toISOString()
+    url: 'https://raw.githubusercontent.com/simperapp/simper-app/main/admin-web/public/media/foto_tv_1794370161556.jpg',
+    file_size_bytes: 2142928,
+    duration_seconds: 10,
+    created_at: '2026-11-11T04:09:26.099404+00:00'
   },
   {
-    id: 'a0000000-0000-0000-0000-000000000003',
-    title: 'Sobremesas da Casa & Cafés',
+    id: 'a7ac2f90-aa33-40e1-b627-5ff76a45687a',
+    title: 'Anúncio Personalizado',
     type: 'image',
-    url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=1280&auto=format&fit=crop&q=80',
-    file_size_bytes: 510000,
-    duration_seconds: 12,
-    created_at: new Date().toISOString()
+    url: 'https://raw.githubusercontent.com/simperapp/simper-app/main/admin-web/public/media/anuncio_novo_usuario.png',
+    file_size_bytes: 2904681,
+    duration_seconds: 10,
+    created_at: '2026-11-12T15:15:06.626139+00:00'
+  },
+  {
+    id: '8d395421-8868-461c-bd0d-e4e0a7e0f32e',
+    title: 'Salgadinhos e Pães de Queijo Mineiros',
+    type: 'image',
+    url: 'https://raw.githubusercontent.com/simperapp/simper-app/main/admin-web/public/media/foto_tv_1794370531160.jpg',
+    file_size_bytes: 2248374,
+    duration_seconds: 10,
+    created_at: '2026-11-11T04:15:35.836639+00:00'
   }
 ];
 
 const initialPlaylists: Playlist[] = [
   {
-    id: 'b0000000-0000-0000-0000-000000000001',
-    name: 'Grade Comercial Principal',
-    description: 'Sequência contínua de anúncios comerciais',
+    id: '93027c5b-4e86-4c06-a563-5bcd739ee968',
+    name: 'Grade Principal de Anúncios',
+    description: 'Sequência contínua de anúncios comerciais na Smart TV',
     media_ids: [
-      'a0000000-0000-0000-0000-000000000001',
-      'a0000000-0000-0000-0000-000000000002',
-      'a0000000-0000-0000-0000-000000000003'
+      '508dadac-c3ad-4475-9ed0-624fc9c091d7',
+      '7f4e60e7-ad32-4875-b978-c4b02fa1eee6',
+      'a7ac2f90-aa33-40e1-b627-5ff76a45687a',
+      '8d395421-8868-461c-bd0d-e4e0a7e0f32e'
     ],
     created_at: new Date().toISOString()
   }
@@ -379,32 +389,38 @@ export const api = {
     const updated = [newItem, ...media];
     setStored('media', updated);
 
-    // Adiciona automaticamente à primeira playlist
+    // 1. Insere primeiro em media_items para satisfazer chave estrangeira
+    if (isSupabaseConfigured) {
+      safeRemote(async () => {
+        await supabase.from('media_items').insert({
+          id: newId,
+          title,
+          type,
+          public_url: url,
+          duration_seconds: durationSeconds,
+          file_size_bytes: fileSizeBytes
+        });
+
+        // 2. Insere na playlist logo após o media_item ser criado
+        const playlists = this.getPlaylists();
+        if (playlists.length > 0) {
+          await supabase.from('playlist_items').insert({
+            playlist_id: playlists[0].id,
+            media_item_id: newId,
+            display_order: playlists[0].media_ids.length + 1
+          });
+        }
+      });
+    }
+
+    // Adiciona à playlist no storage local
     const playlists = this.getPlaylists();
     if (playlists.length > 0) {
       playlists[0].media_ids.push(newItem.id);
       setStored('playlists', playlists);
-
-      if (isSupabaseConfigured) {
-        safeRemote(() => supabase.from('playlist_items').insert({
-          playlist_id: playlists[0].id,
-          media_item_id: newId,
-          display_order: playlists[0].media_ids.length
-        }));
-      }
     }
 
-    if (isSupabaseConfigured) {
-      safeRemote(() => supabase.from('media_items').insert({
-        id: newId,
-        title,
-        type,
-        public_url: url,
-        duration_seconds: durationSeconds,
-        file_size_bytes: fileSizeBytes
-      }));
-    }
-
+    this.notify();
     return newItem;
   },
 
@@ -418,6 +434,7 @@ export const api = {
       media_ids: pl.media_ids.filter(mId => mId !== id)
     }));
     setStored('playlists', updatedPlaylists);
+    this.notify();
 
     if (isSupabaseConfigured) {
       safeRemote(() => supabase.from('media_items').delete().eq('id', id));

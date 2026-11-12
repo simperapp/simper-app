@@ -10,6 +10,48 @@ interface Props {
   onUpdateDuration: (id: string, durationSeconds: number) => void;
 }
 
+function compressImage(file: File, maxDim = 1920, quality = 0.82): Promise<{ dataUrl: string; file: File }> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return resolve({ dataUrl: e.target?.result as string, file });
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            return resolve({ dataUrl: e.target?.result as string, file });
+          }
+          const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' });
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve({ dataUrl, file: compressedFile });
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => resolve({ dataUrl: e.target?.result as string, file });
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve({ dataUrl: '', file });
+    reader.readAsDataURL(file);
+  });
+}
+
 export const MediaLibraryView: React.FC<Props> = ({
   media,
   onAddMedia,
@@ -30,22 +72,35 @@ export const MediaLibraryView: React.FC<Props> = ({
   const [fileSize, setFileSize] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      setSelectedFile(file);
       const isVideo = file.type.startsWith('video');
       setFileType(isVideo ? 'video' : 'image');
-      setFileSize(file.size);
       if (!title) {
         setTitle(file.name.replace(/\.[^/.]+$/, ''));
       }
 
-      const reader = new FileReader();
-      reader.onload = () => {
-        setFilePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      if (isVideo) {
+        setSelectedFile(file);
+        setFileSize(file.size);
+        const reader = new FileReader();
+        reader.onload = () => setFilePreview(reader.result as string);
+        reader.readAsDataURL(file);
+      } else {
+        try {
+          const comp = await compressImage(file, 1920, 0.82);
+          setFilePreview(comp.dataUrl);
+          setSelectedFile(comp.file);
+          setFileSize(comp.file.size);
+        } catch {
+          setSelectedFile(file);
+          setFileSize(file.size);
+          const reader = new FileReader();
+          reader.onload = () => setFilePreview(reader.result as string);
+          reader.readAsDataURL(file);
+        }
+      }
     }
   };
 

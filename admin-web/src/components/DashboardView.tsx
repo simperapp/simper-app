@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Tv, 
   Smartphone, 
@@ -29,7 +29,7 @@ interface Props {
 export const DashboardView: React.FC<Props> = ({
   devices,
   media,
-  playlists: _playlists,
+  playlists,
   onNextMedia,
   onPrevMedia,
   onTogglePlayPause,
@@ -43,22 +43,74 @@ export const DashboardView: React.FC<Props> = ({
 
   const activeDevice = devices.find(d => d.id === selectedDeviceId) || devices[0];
 
+  // 1. Obtém a lista real de anúncios da playlist vinculada a este terminal
+  const currentDeviceMediaList = useMemo(() => {
+    if (!activeDevice) return media;
+    if (activeDevice.assigned_playlist_id) {
+      const pl = playlists.find(p => p.id === activeDevice.assigned_playlist_id);
+      if (pl && pl.media_ids && pl.media_ids.length > 0) {
+        const list = pl.media_ids
+          .map(id => media.find(m => m.id === id))
+          .filter((m): m is MediaItem => Boolean(m));
+        if (list.length > 0) return list;
+      }
+    }
+    return media;
+  }, [activeDevice, playlists, media]);
+
+  const [playbackIndex, setPlaybackIndex] = useState<number>(() => {
+    return activeDevice?.current_media_index ?? 0;
+  });
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+
+  // Sincroniza o índice de reprodução sempre que o dispositivo atualizar
+  useEffect(() => {
+    if (activeDevice?.current_media_index !== undefined) {
+      setPlaybackIndex(activeDevice.current_media_index);
+      setElapsedSeconds(0);
+    }
+  }, [activeDevice?.current_media_index, activeDevice?.id]);
+
+  const isCurrentlyPlaying = activeDevice?.playback_state === 'playing';
+
+  // Ciclo dinâmico em tempo real exatamente igual ao da Smart TV física
+  useEffect(() => {
+    if (!isCurrentlyPlaying || currentDeviceMediaList.length === 0) return;
+
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => {
+        const safeIdx = ((playbackIndex % currentDeviceMediaList.length) + currentDeviceMediaList.length) % currentDeviceMediaList.length;
+        const currentItem = currentDeviceMediaList[safeIdx];
+        const duration = currentItem?.duration_seconds || 10;
+        if (prev + 1 >= duration) {
+          setPlaybackIndex(old => (old + 1) % currentDeviceMediaList.length);
+          return 0;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isCurrentlyPlaying, playbackIndex, currentDeviceMediaList]);
+
+  const count = currentDeviceMediaList.length;
+  const currentSafeIndex = count > 0 ? ((playbackIndex % count) + count) % count : 0;
+  const activeMedia = currentDeviceMediaList[currentSafeIndex] || null;
+
   const getActiveMediaForDevice = (device?: Device): MediaItem | null => {
     if (!device || media.length === 0) return null;
-    const count = media.length;
-    const idx = ((device.current_media_index ?? 0) % count + count) % count;
+    if (device.id === activeDevice?.id) return activeMedia;
+    const c = media.length;
+    const idx = ((device.current_media_index ?? 0) % c + c) % c;
     return media[idx] || media[0] || null;
   };
 
-  const activeMedia = getActiveMediaForDevice(activeDevice);
-
   const getMediaCountForDevice = (_device?: Device): number => {
-    return media.length || 1;
+    return currentDeviceMediaList.length || 1;
   };
 
-  const totalCycleSeconds = media.reduce((acc, m) => acc + (m.duration_seconds || 10), 0);
+  const totalCycleSeconds = currentDeviceMediaList.reduce((acc, m) => acc + (m.duration_seconds || 10), 0);
   const onlineCount = devices.filter(d => d.status === 'online').length;
-  const isCurrentlyPlaying = activeDevice?.playback_state === 'playing';
 
   return (
     <div className="space-y-8 animate-fadeIn">
@@ -245,12 +297,30 @@ export const DashboardView: React.FC<Props> = ({
                 9:16 HD
               </div>
 
+              {/* Barra de Progresso do Anúncio Atual */}
+              {isCurrentlyPlaying && activeMedia && (
+                <div className="absolute bottom-20 left-3 right-3 h-1 bg-white/20 rounded-full overflow-hidden z-10">
+                  <div 
+                    className="h-full bg-simper-gold transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.round(((elapsedSeconds + 1) / (activeMedia.duration_seconds || 10)) * 100))}%` }}
+                  />
+                </div>
+              )}
+
               {/* Barra de Informações do Anúncio no rodapé da tela */}
-              <div className="absolute bottom-3 left-3 right-3 bg-black/85 backdrop-blur-md p-3 rounded-xl text-white border border-white/10 z-10">
+              <div className="absolute bottom-3 left-3 right-3 bg-black/85 backdrop-blur-md p-2.5 rounded-xl text-white border border-white/10 z-10">
+                <div className="flex items-center justify-between text-[10px] text-slate-300 mb-0.5">
+                  <span className="font-mono text-simper-gold font-bold">
+                    #{currentSafeIndex + 1} de {currentDeviceMediaList.length}
+                  </span>
+                  <span className="font-mono font-bold text-white bg-white/10 px-1.5 py-0.5 rounded text-[9px]">
+                    {elapsedSeconds}s / {activeMedia?.duration_seconds || 10}s
+                  </span>
+                </div>
                 <p className="font-bold truncate text-xs leading-tight">{activeMedia?.title || 'Sem título'}</p>
-                <div className="flex items-center justify-between text-[10px] text-slate-300 mt-1.5">
-                  <span className="font-mono text-simper-gold font-bold bg-simper-gold/15 px-1.5 py-0.5 rounded">
-                    {activeMedia?.duration_seconds || 10}s
+                <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                  <span className="text-emerald-400 font-bold flex items-center gap-1 text-[9px]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Sincronizado com TV
                   </span>
                   <span className="text-[10px] text-slate-400 capitalize">
                     {activeDevice?.transition_type || 'Fade'}
@@ -277,7 +347,11 @@ export const DashboardView: React.FC<Props> = ({
               <div className="flex items-center justify-center gap-2">
                 {/* Voltar Anúncio */}
                 <button
-                  onClick={() => onPrevMedia(activeDevice.id, getMediaCountForDevice(activeDevice))}
+                  onClick={() => {
+                    onPrevMedia(activeDevice.id, getMediaCountForDevice(activeDevice));
+                    setPlaybackIndex(old => (old - 1 + currentDeviceMediaList.length) % currentDeviceMediaList.length);
+                    setElapsedSeconds(0);
+                  }}
                   title="Anúncio Anterior"
                   className="p-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-simper-navy-deep dark:hover:bg-simper-navy-hover border border-slate-200 dark:border-simper-navy-border text-slate-700 dark:text-slate-200 transition-all cursor-pointer hover:scale-105 active:scale-95"
                 >
@@ -309,7 +383,11 @@ export const DashboardView: React.FC<Props> = ({
 
                 {/* Avançar Anúncio */}
                 <button
-                  onClick={() => onNextMedia(activeDevice.id, getMediaCountForDevice(activeDevice))}
+                  onClick={() => {
+                    onNextMedia(activeDevice.id, getMediaCountForDevice(activeDevice));
+                    setPlaybackIndex(old => (old + 1) % currentDeviceMediaList.length);
+                    setElapsedSeconds(0);
+                  }}
                   title="Próximo Anúncio"
                   className="p-3 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-simper-navy-deep dark:hover:bg-simper-navy-hover border border-slate-200 dark:border-simper-navy-border text-slate-700 dark:text-slate-200 transition-all cursor-pointer hover:scale-105 active:scale-95"
                 >
@@ -358,15 +436,14 @@ export const DashboardView: React.FC<Props> = ({
                 </p>
               </div>
               <span className="text-xs font-semibold text-slate-400 shrink-0">
-                {media.length} itens na rotação
+                {currentDeviceMediaList.length} itens na rotação
               </span>
             </div>
 
             {/* GRADE INTERATIVA DE MÍDIAS COM ONCLICK */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {media.map((item, idx) => {
-                const currentIdx = ((activeDevice?.current_media_index ?? 0) % (media.length || 1) + (media.length || 1)) % (media.length || 1);
-                const isPlayingThis = currentIdx === idx;
+              {currentDeviceMediaList.map((item, idx) => {
+                const isPlayingThis = currentSafeIndex === idx;
 
                 return (
                   <div
@@ -374,6 +451,8 @@ export const DashboardView: React.FC<Props> = ({
                     onClick={() => {
                       if (activeDevice) {
                         onSkipToMedia(activeDevice.id, idx);
+                        setPlaybackIndex(idx);
+                        setElapsedSeconds(0);
                       }
                     }}
                     role="button"

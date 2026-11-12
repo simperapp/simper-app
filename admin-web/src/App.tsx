@@ -70,7 +70,16 @@ export function App() {
     loadData();
     api.syncWithSupabase();
     const unsubscribe = api.subscribe(loadData);
-    return () => unsubscribe();
+
+    // Polling contínuo com Supabase a cada 4s para refletir o estado exato da TV em tempo real
+    const pollInterval = setInterval(() => {
+      api.syncWithSupabase();
+    }, 4000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
   }, [isAuthenticated]);
 
   // Aplicação estrita do tema em toda a hierarquia HTML

@@ -10,7 +10,7 @@ interface Props {
   onUpdateDuration: (id: string, durationSeconds: number) => void;
 }
 
-function compressImage(file: File, maxDim = 1920, quality = 0.82): Promise<{ dataUrl: string; file: File }> {
+function compressImage(file: File, maxDim = 1280, quality = 0.75): Promise<{ dataUrl: string; file: File }> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -89,7 +89,7 @@ export const MediaLibraryView: React.FC<Props> = ({
         reader.readAsDataURL(file);
       } else {
         try {
-          const comp = await compressImage(file, 1920, 0.82);
+          const comp = await compressImage(file, 1280, 0.75);
           setFilePreview(comp.dataUrl);
           setSelectedFile(comp.file);
           setFileSize(comp.file.size);

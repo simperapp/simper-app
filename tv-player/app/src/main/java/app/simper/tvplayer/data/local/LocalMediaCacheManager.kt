@@ -53,7 +53,27 @@ class LocalMediaCacheManager(private val context: Context) {
             return@withContext destinationFile
         }
 
-        // 2. Realiza o download
+        // 2. Se for data URI (base64), decodifica diretamente para arquivo local sem precisar de HTTP
+        if (mediaItem.url.startsWith("data:")) {
+            try {
+                val base64Index = mediaItem.url.indexOf("base64,")
+                if (base64Index != -1) {
+                    val rawBase64 = mediaItem.url.substring(base64Index + 7)
+                    val decodedBytes = android.util.Base64.decode(rawBase64, android.util.Base64.DEFAULT)
+                    val tempFile = File(cacheDir, "${mediaItem.id}.tmp")
+                    FileOutputStream(tempFile).use { it.write(decodedBytes) }
+                    if (tempFile.renameTo(destinationFile)) {
+                        Log.i(SimperApplication.TAG, "Mídia base64 salva em cache local: ${destinationFile.absolutePath}")
+                        return@withContext destinationFile
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(SimperApplication.TAG, "Erro ao decodificar mídia data URI: ${e.message}", e)
+            }
+            return@withContext null
+        }
+
+        // 3. Realiza o download via HTTP/HTTPS
         Log.i(SimperApplication.TAG, "Iniciando download da mídia: ${mediaItem.title} de ${mediaItem.url}")
         try {
             val request = Request.Builder().url(mediaItem.url).build()

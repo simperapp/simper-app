@@ -12,7 +12,10 @@ import {
   ChevronRight,
   Radio,
   Menu,
-  X
+  X,
+  Download,
+  Smartphone,
+  CheckCircle2
 } from 'lucide-react';
 import { api } from './services/api';
 import type { Device, MediaItem, Playlist, TransitionType } from './types/database';
@@ -59,6 +62,54 @@ export function App() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
 
+  // PWA (Progressive Web App) - Instalação no Celular
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    );
+  });
+
+  useEffect(() => {
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsPwaInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      try {
+        await deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          setDeferredPrompt(null);
+          setIsPwaInstalled(true);
+          setShowInstallModal(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('Install prompt cancelado ou não suportado:', err);
+      }
+    }
+    setShowInstallModal(true);
+  };
+
   const loadData = () => {
     setDevices(api.getDevices());
     setMedia(api.getMedia());
@@ -68,6 +119,7 @@ export function App() {
   useEffect(() => {
     if (!isAuthenticated) return;
     loadData();
+    api.initRealtime();
     api.syncWithSupabase();
     const unsubscribe = api.subscribe(loadData);
 
@@ -288,6 +340,30 @@ export function App() {
           })}
         </div>
 
+        {/* PWA Install Button (Desktop & Mobile Tablet) */}
+        <div className="px-4 py-2">
+          <button
+            onClick={handleInstallClick}
+            className="w-full flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-amber-500/10 via-simper-gold/15 to-amber-500/10 border border-simper-gold/40 text-slate-800 dark:text-amber-200 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer shadow-xs group"
+            title="Instalar aplicativo Simper no celular ou computador"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-simper-gold text-slate-950 flex items-center justify-center font-bold shadow-xs">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-bold leading-tight">
+                  Baixar no Celular
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-amber-300/70 font-medium">
+                  {isPwaInstalled ? 'App Instalado' : 'Instalar App (PWA)'}
+                </div>
+              </div>
+            </div>
+            <Download className="w-4 h-4 text-simper-gold group-hover:translate-y-0.5 transition-transform" />
+          </button>
+        </div>
+
         {/* Sidebar Footer: Theme Switcher & Admin Card */}
         <div className="p-4 border-t border-slate-100 dark:border-simper-navy-border/60 space-y-3">
           {/* Alternador de Tema Claro / Escuro Rápido */}
@@ -357,6 +433,16 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Botão Baixar / Instalar App no Celular */}
+          <button
+            onClick={handleInstallClick}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-simper-gold text-slate-950 font-bold text-xs shadow-xs active:scale-95 transition-transform cursor-pointer"
+            title="Baixar App no Celular"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Baixar App</span>
+          </button>
+
           {/* Alternador de Tema */}
           <button
             onClick={() => applyTheme(!darkMode)}
@@ -407,6 +493,21 @@ export function App() {
                 </button>
               );
             })}
+
+            {/* Botão Instalar no Menu Celular */}
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                handleInstallClick();
+              }}
+              className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 to-simper-gold/20 border border-simper-gold/40 text-amber-900 dark:text-amber-200 font-bold text-sm mt-2"
+            >
+              <div className="flex items-center gap-3">
+                <Smartphone className="w-4 h-4 text-simper-gold" />
+                <span>Instalar Aplicativo no Celular</span>
+              </div>
+              <Download className="w-4 h-4 text-simper-gold" />
+            </button>
           </div>
 
           <button
@@ -526,6 +627,126 @@ export function App() {
           </div>
         </footer>
       </div>
+
+      {/* 4. MODAL DE INSTALAÇÃO DO APLICATIVO (PWA) */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#0c1428] rounded-3xl max-w-lg w-full border border-slate-200 dark:border-simper-navy-border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-100 dark:border-simper-navy-border/60 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-simper-gold/15 border border-simper-gold/30 flex items-center justify-center text-simper-gold">
+                  <Smartphone className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight">
+                    Baixar Aplicativo Simper
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Instale direto no seu celular Android ou iPhone
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInstallModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-simper-navy-deep transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-5">
+              {isPwaInstalled ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3 text-emerald-800 dark:text-emerald-300">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
+                  <div className="text-xs leading-relaxed">
+                    <strong>Aplicativo Já Instalado!</strong> O Simper já está rodando como app autônomo no seu dispositivo.
+                  </div>
+                </div>
+              ) : deferredPrompt ? (
+                <div className="text-center space-y-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Seu navegador suporta instalação direta com 1 clique!
+                  </p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await deferredPrompt.prompt();
+                        const choice = await deferredPrompt.userChoice;
+                        if (choice && choice.outcome === 'accepted') {
+                          setDeferredPrompt(null);
+                          setIsPwaInstalled(true);
+                          setShowInstallModal(false);
+                        }
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                    }}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-simper-gold text-slate-950 font-black text-sm shadow-lg hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" /> Instalar Aplicativo Agora
+                  </button>
+                </div>
+              ) : null}
+
+              {/* Guia Passo a Passo por Plataforma */}
+              <div className="space-y-4">
+                {/* Android */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-simper-navy-deep/60 border border-slate-200/80 dark:border-simper-navy-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-black text-slate-900 dark:text-white">🤖 No Android (Chrome / Edge / Samsung)</span>
+                  </div>
+                  <ol className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-decimal list-inside leading-relaxed">
+                    <li>Toque nos <strong>três pontinhos (⋮)</strong> no canto superior do navegador.</li>
+                    <li>Selecione <strong>"Instalar aplicativo"</strong> ou <strong>"Adicionar à tela inicial"</strong>.</li>
+                    <li>Pronto! O ícone da Simper será criado na tela do seu celular e abrirá em modo app nativo.</li>
+                  </ol>
+                </div>
+
+                {/* iPhone / iOS */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-simper-navy-deep/60 border border-slate-200/80 dark:border-simper-navy-border">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-black text-slate-900 dark:text-white">🍎 No iPhone / iPad (Safari)</span>
+                  </div>
+                  <ol className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-decimal list-inside leading-relaxed">
+                    <li>Abra este site no navegador <strong>Safari</strong>.</li>
+                    <li>Toque no botão de <strong>Compartilhar</strong> (ícone quadrado com seta para cima ⎋ na barra inferior).</li>
+                    <li>Role as opções para baixo e toque em <strong>"Adicionar à Tela de Início"</strong>.</li>
+                    <li>Toque em <strong>Adicionar</strong> no canto superior direito.</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* URL Direta */}
+              <div className="p-3 rounded-2xl bg-slate-100 dark:bg-simper-navy-card border border-slate-200 dark:border-simper-navy-border flex items-center justify-between gap-2">
+                <div className="truncate text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  https://simperapp.github.io/simper-app/
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText('https://simperapp.github.io/simper-app/');
+                    alert('Link copiado para a área de transferência!');
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-simper-gold/15 text-simper-gold border border-simper-gold/30 text-[11px] font-bold hover:bg-simper-gold/25 transition-colors cursor-pointer shrink-0"
+                >
+                  Copiar Link
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 dark:bg-simper-navy-card/60 border-t border-slate-100 dark:border-simper-navy-border/60 text-center">
+              <button
+                onClick={() => setShowInstallModal(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-200 dark:bg-simper-navy-deep hover:bg-slate-300 dark:hover:bg-simper-navy-hover text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

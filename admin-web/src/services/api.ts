@@ -106,6 +106,7 @@ const initialDevices: Device[] = [
 
 type SyncListener = () => void;
 const listeners: SyncListener[] = [];
+let realtimeChannel: any = null;
 
 export const api = {
   subscribe(fn: SyncListener) {
@@ -118,6 +119,27 @@ export const api = {
 
   notify() {
     listeners.forEach(fn => fn());
+  },
+
+  // SINCRONIZAÇÃO EM TEMPO REAL (WEBSOCKET REALTIME)
+  initRealtime() {
+    if (!isSupabaseConfigured || realtimeChannel) return;
+
+    realtimeChannel = supabase
+      .channel('simper-global-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'media_items' }, () => {
+        this.syncWithSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'playlists' }, () => {
+        this.syncWithSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'playlist_items' }, () => {
+        this.syncWithSupabase();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, () => {
+        this.syncWithSupabase();
+      })
+      .subscribe();
   },
 
   // SINCRONIZAÇÃO NUVEM COM SUPABASE

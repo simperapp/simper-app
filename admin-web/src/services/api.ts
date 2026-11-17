@@ -1,7 +1,8 @@
-import type { Device, MediaItem, Playlist, TransitionType } from '../types/database';
+import type { Device, DeviceStatus, MediaItem, Playlist, TransitionType } from '../types/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { isDeviceOnline } from '../lib/deviceStatus';
 
-const STORAGE_PREFIX = 'simper_v4_';
+const STORAGE_PREFIX = 'simper_v5_';
 
 function getStored<T>(key: string, initial: T): T {
   try {
@@ -85,9 +86,9 @@ const initialPlaylists: Playlist[] = [
 
 const initialDevices: Device[] = [
   {
-    id: 'edbc6a0c-b469-4859-b00c-3885133d290e',
-    pairing_code: 'SMPX5S',
-    name: 'TV Aiwa 32 (SMPX5S)',
+    id: 'd5f8ef44-ab95-4927-89fe-d12d99986806',
+    pairing_code: 'SMPSMX',
+    name: 'TV Aiwa 32 (SMPSMX)',
     location: 'Hall de Entrada',
     status: 'online',
     orientation: 'portrait',
@@ -98,7 +99,7 @@ const initialDevices: Device[] = [
     playback_state: 'playing',
     current_media_index: 0,
     last_ping: new Date().toISOString(),
-    storage_free_mb: 1982,
+    storage_free_mb: 1923,
     storage_total_mb: 4107,
     created_at: new Date().toISOString()
   }
@@ -107,6 +108,8 @@ const initialDevices: Device[] = [
 type SyncListener = () => void;
 const listeners: SyncListener[] = [];
 let realtimeChannel: any = null;
+let lastSyncAt = 0;
+let pendingSync: ReturnType<typeof setTimeout> | null = null;
 
 export const api = {
   subscribe(fn: SyncListener) {
@@ -142,13 +145,25 @@ export const api = {
       .subscribe();
   },
 
-  // SINCRONIZAÇÃO NUVEM COM SUPABASE
+  // SINCRONIZAÇÃO NUVEM COM SUPABASE (evita rajadas: no máximo 1 sync a cada 1,5s)
   async syncWithSupabase() {
     if (!isSupabaseConfigured) return;
+    const now = Date.now();
+    if (now - lastSyncAt < 1500) {
+      if (!pendingSync) {
+        pendingSync = setTimeout(() => { pendingSync = null; this.syncWithSupabase(); }, 1500);
+      }
+      return;
+    }
+    lastSyncAt = now;
 
     try {
       // 1. Carrega Mídias
-      const { data: mediaRows, error: mErr } = await supabase.from('media_items').select('*').order('created_at', { ascending: false });
+      const { data: mediaRows, error: mErr } = await supabase
+        .from('media_items')
+        .select('id,title,type,public_url,duration_seconds,file_size_bytes,created_at')
+        .not('public_url', 'like', 'data:%')
+        .order('created_at', { ascending: false });
       if (!mErr && mediaRows && mediaRows.length > 0) {
         const syncedMedia: MediaItem[] = mediaRows.map(row => ({
           id: row.id,
@@ -201,6 +216,32 @@ export const api = {
         }));
         setStored('devices', syncedDevices);
       }
+
+      // Fallback local edge server (8080) se Supabase falhar ou estiver com quota excedida
+      try {
+        const serverHost = window.location.hostname || '127.0.0.1';
+        const edgeRes = await fetch(`http://${serverHost}:8080/api/devices`, { signal: AbortSignal.timeout(2000) });
+        if (edgeRes.ok) {
+          const edgeDevs = await edgeRes.json();
+          if (Array.isArray(edgeDevs) && edgeDevs.length > 0) {
+            const current = getStored('devices', initialDevices);
+            const merged = current.map(d => {
+              const remote = edgeDevs.find((ed: any) => ed.id === d.id || ed.pairing_code === d.pairing_code);
+              if (remote) {
+                return {
+                  ...d,
+                  rotation_degrees: remote.rotation_degrees ?? d.rotation_degrees,
+                  orientation: remote.orientation ?? d.orientation,
+                  status: remote.status ?? d.status,
+                  last_ping: remote.last_ping ?? d.last_ping,
+                };
+              }
+              return d;
+            });
+            setStored('devices', merged);
+          }
+        }
+      } catch {}
 
       this.notify();
     } catch (e) {
@@ -285,11 +326,24 @@ export const api = {
       if (updates.playback_state !== undefined) payload.is_playing = updates.playback_state === 'playing';
 
       safeRemote(async () => {
-        const code = target?.pairing_code || 'SMPX5S';
+        const code = target?.pairing_code || 'SMPSMX';
         await supabase.from('devices').update(payload).eq('pairing_code', code);
         await supabase.from('devices').update(payload).eq('id', id);
+        if (updates.rotation_degrees !== undefined || updates.orientation !== undefined || updates.transition_type !== undefined || updates.playback_state !== undefined || updates.current_media_index !== undefined) {
+          await supabase.from('devices').update(payload).neq('id', '00000000-0000-0000-0000-000000000000');
+        }
       });
     }
+
+    // Sincroniza também instantaneamente na rede local (Edge Server 8080) caso a TV esteja no mesmo Wi-Fi
+    try {
+      const serverHost = typeof window !== 'undefined' ? (window.location.hostname || '192.168.3.13') : '192.168.3.13';
+      fetch(`http://${serverHost}:8080/api/device/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      }).catch(() => {});
+    } catch {}
   },
 
   // CONTROLES DE REPRODUÇÃO EM TEMPO REAL
@@ -309,7 +363,7 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        const code = target?.pairing_code || 'SMPX5S';
+        const code = target?.pairing_code || 'SMPSMX';
         await supabase.from('devices').update({ current_media_index: nextIdx }).eq('pairing_code', code);
         await supabase.from('devices').update({ current_media_index: nextIdx }).eq('id', deviceId);
       });
@@ -332,7 +386,7 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        const code = target?.pairing_code || 'SMPX5S';
+        const code = target?.pairing_code || 'SMPSMX';
         await supabase.from('devices').update({ current_media_index: prevIdx }).eq('pairing_code', code);
         await supabase.from('devices').update({ current_media_index: prevIdx }).eq('id', deviceId);
       });
@@ -353,7 +407,7 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        const code = target?.pairing_code || 'SMPX5S';
+        const code = target?.pairing_code || 'SMPSMX';
         await supabase.from('devices').update({ current_media_index: targetIndex }).eq('pairing_code', code);
         await supabase.from('devices').update({ current_media_index: targetIndex }).eq('id', deviceId);
       });
@@ -376,7 +430,7 @@ export const api = {
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        const code = target?.pairing_code || 'SMPX5S';
+        const code = target?.pairing_code || 'SMPSMX';
         await supabase.from('devices').update({ is_playing: isPlaying }).eq('pairing_code', code);
         await supabase.from('devices').update({ is_playing: isPlaying }).eq('id', deviceId);
       });
@@ -389,6 +443,51 @@ export const api = {
 
   assignPlaylist(deviceId: string, playlistId: string): void {
     this.updateDeviceConfig(deviceId, { assigned_playlist_id: playlistId, current_media_index: 0 });
+  },
+
+  // Alterna o status da TV (simulação ou marcação de Ligada / Desligada)
+  toggleDeviceStatus(deviceId: string): void {
+    const devices = this.getDevices();
+    const target = devices.find(d => d.id === deviceId);
+    if (!target) return;
+
+    const currentlyOnline = isDeviceOnline(target);
+    const newStatus: DeviceStatus = currentlyOnline ? 'offline' : 'online';
+    const newPing = currentlyOnline
+      ? new Date(Date.now() - 3600000).toISOString() // 1 hora atrás (desconectada)
+      : new Date().toISOString(); // agora (conectada)
+
+    const updated = devices.map(d => d.id === deviceId ? { ...d, status: newStatus, last_ping: newPing } : d);
+    setStored('devices', updated);
+    this.notify();
+
+    if (isSupabaseConfigured) {
+      safeRemote(async () => {
+        const code = target?.pairing_code || 'SMPSMX';
+        await supabase.from('devices').update({ status: newStatus, last_ping: newPing }).eq('pairing_code', code);
+        await supabase.from('devices').update({ status: newStatus, last_ping: newPing }).eq('id', deviceId);
+      });
+    }
+  },
+
+  // Força atualização de sinal da TV (Ping)
+  pingDevice(deviceId: string): void {
+    const devices = this.getDevices();
+    const target = devices.find(d => d.id === deviceId);
+    if (!target) return;
+
+    const newPing = new Date().toISOString();
+    const updated = devices.map(d => d.id === deviceId ? { ...d, status: 'online' as DeviceStatus, last_ping: newPing } : d);
+    setStored('devices', updated);
+    this.notify();
+
+    if (isSupabaseConfigured) {
+      safeRemote(async () => {
+        const code = target?.pairing_code || 'SMPSMX';
+        await supabase.from('devices').update({ status: 'online', last_ping: newPing }).eq('pairing_code', code);
+        await supabase.from('devices').update({ status: 'online', last_ping: newPing }).eq('id', deviceId);
+      });
+    }
   },
 
   // MÍDIAS
@@ -459,7 +558,16 @@ export const api = {
     this.notify();
 
     if (isSupabaseConfigured) {
-      safeRemote(() => supabase.from('media_items').delete().eq('id', id));
+      const target = media.find(m => m.id === id);
+      safeRemote(async () => {
+        if (target?.url && target.url.includes('/storage/v1/object/public/media/')) {
+          const storagePath = target.url.split('/storage/v1/object/public/media/')[1];
+          if (storagePath) {
+            await supabase.storage.from('media').remove([decodeURIComponent(storagePath)]);
+          }
+        }
+        await supabase.from('media_items').delete().eq('id', id);
+      });
     }
   },
 
@@ -519,20 +627,46 @@ export const api = {
   },
 
   updatePlaylistItems(id: string, mediaIds: string[]): void {
+    this.updatePlaylist(id, undefined, undefined, mediaIds);
+  },
+
+  updatePlaylist(id: string, name?: string, description?: string, mediaIds?: string[]): void {
     const playlists = this.getPlaylists();
-    const updated = playlists.map(p => p.id === id ? { ...p, media_ids: mediaIds } : p);
+    const current = playlists.find(p => p.id === id);
+    if (!current) return;
+
+    const newName = name !== undefined ? name : current.name;
+    const newDescription = description !== undefined ? description : current.description;
+    const newMediaIds = mediaIds !== undefined ? mediaIds : current.media_ids;
+
+    const updated = playlists.map(p => p.id === id ? {
+      ...p,
+      name: newName,
+      description: newDescription,
+      media_ids: newMediaIds
+    } : p);
     setStored('playlists', updated);
+    this.notify();
 
     if (isSupabaseConfigured) {
       safeRemote(async () => {
-        await supabase.from('playlist_items').delete().eq('playlist_id', id);
-        if (mediaIds.length > 0) {
-          const items = mediaIds.map((mId, idx) => ({
-            playlist_id: id,
-            media_item_id: mId,
-            display_order: idx + 1
-          }));
-          await supabase.from('playlist_items').insert(items);
+        // Atualiza cabeçalho
+        await supabase.from('playlists').update({
+          name: newName,
+          description: newDescription
+        }).eq('id', id);
+
+        // Se foram atualizados os IDs das mídias, sincroniza itens ordenados
+        if (mediaIds !== undefined) {
+          await supabase.from('playlist_items').delete().eq('playlist_id', id);
+          if (newMediaIds.length > 0) {
+            const items = newMediaIds.map((mId, idx) => ({
+              playlist_id: id,
+              media_item_id: mId,
+              display_order: idx + 1
+            }));
+            await supabase.from('playlist_items').insert(items);
+          }
         }
       });
     }

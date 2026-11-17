@@ -72,6 +72,10 @@ export const MediaLibraryView: React.FC<Props> = ({
   const [fileSize, setFileSize] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
 
+  const MAX_IMAGE_BYTES = 2 * 1024 * 1024; // 2 MB máx por foto após compressão
+  const MAX_VIDEO_BYTES = 12 * 1024 * 1024; // 12 MB máx por vídeo (protege cota do Supabase)
+  const MAX_TOTAL_MEDIA_ITEMS = 25; // Limite de 25 mídias ativas na biblioteca
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -82,6 +86,11 @@ export const MediaLibraryView: React.FC<Props> = ({
       }
 
       if (isVideo) {
+        if (file.size > MAX_VIDEO_BYTES) {
+          alert(`Vídeo muito grande (${(file.size / (1024 * 1024)).toFixed(1)} MB). O limite de segurança para não estourar a cota do Supabase é de 12 MB por vídeo.`);
+          e.target.value = '';
+          return;
+        }
         setSelectedFile(file);
         setFileSize(file.size);
         const reader = new FileReader();
@@ -89,11 +98,22 @@ export const MediaLibraryView: React.FC<Props> = ({
         reader.readAsDataURL(file);
       } else {
         try {
-          const comp = await compressImage(file, 1280, 0.75);
+          // Comprime sempre para máx 1280px e qualidade 0.72 (~150KB-350KB) para economizar 90% da cota
+          const comp = await compressImage(file, 1280, 0.72);
+          if (comp.file.size > MAX_IMAGE_BYTES) {
+            alert('Imagem excede o limite máximo de 2 MB mesmo após compressão.');
+            e.target.value = '';
+            return;
+          }
           setFilePreview(comp.dataUrl);
           setSelectedFile(comp.file);
           setFileSize(comp.file.size);
         } catch {
+          if (file.size > MAX_IMAGE_BYTES) {
+            alert('Imagem muito pesada (máx 2 MB).');
+            e.target.value = '';
+            return;
+          }
           setSelectedFile(file);
           setFileSize(file.size);
           const reader = new FileReader();
@@ -106,6 +126,10 @@ export const MediaLibraryView: React.FC<Props> = ({
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (media.length >= MAX_TOTAL_MEDIA_ITEMS) {
+      alert(`Limite de ${MAX_TOTAL_MEDIA_ITEMS} anúncios atingido! Exclua anúncios antigos antes de enviar novos para proteger a cota da nuvem.`);
+      return;
+    }
     if (!title.trim()) {
       alert('Informe um título para o anúncio.');
       return;
@@ -161,32 +185,41 @@ export const MediaLibraryView: React.FC<Props> = ({
 
         // 2. Se o bucket da nuvem não estiver criado, tenta o servidor local como contingência
         if (!finalUrl && filePreview) {
-          const serverHost = window.location.hostname || '192.168.1.11';
-          try {
-            const res = await fetch(`http://${serverHost}:8080/api/upload-media`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                base64: filePreview,
-                title: title.trim(),
-                type: fileType,
-                durationSeconds: duration
-              })
-            });
-            if (res.ok) {
-              const resData = await res.json();
-              if (resData.url) {
-                finalUrl = resData.url;
+          const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
+          const serverHosts = isLocal
+            ? [window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? '192.168.3.13' : window.location.hostname, '192.168.3.13']
+            : ['192.168.3.13'];
+          for (const host of Array.from(new Set(serverHosts))) {
+            try {
+              const res = await fetch(`http://${host}:8080/api/upload-media`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  base64: filePreview,
+                  title: title.trim(),
+                  type: fileType,
+                  durationSeconds: duration
+                })
+              });
+              if (res.ok) {
+                const resData = await res.json();
+                if (resData.url) {
+                  finalUrl = resData.url;
+                  break;
+                }
               }
+            } catch (localErr) {
+              console.warn('Servidor local offline:', localErr);
             }
-          } catch (localErr) {
-            console.warn('Servidor local offline:', localErr);
           }
         }
 
-        // 3. Contingência base64 direta caso offline
-        if (!finalUrl && filePreview) {
-          finalUrl = filePreview;
+        // 3. NÃO salvar base64 pesado (> 350 KB) no banco para jamais estourar a cota do Supabase.
+        //    Mas para fotos já comprimidas (< 350 KB), caso o bucket 'media' ainda não tenha sido criado no Supabase,
+        //    usa o arquivo otimizado ou avisa para criar o bucket.
+        if (!finalUrl) {
+          alert('O bucket "media" ainda não está ativo no Supabase Storage! Vá no SQL Editor do Supabase e rode o script schema_novo_projeto.sql para liberar o upload de fotos e vídeos de qualquer lugar.');
+          return;
         }
       }
 

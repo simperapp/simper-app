@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { api } from './services/api';
 import type { Device, MediaItem, Playlist, TransitionType } from './types/database';
+import { isDeviceOnline } from './lib/deviceStatus';
 
 import { DashboardView } from './components/DashboardView';
 import { DevicesView } from './components/DevicesView';
@@ -230,6 +231,21 @@ export function App() {
   const handleUpdatePlaylistItems = (id: string, mediaIds: string[]) => {
     api.updatePlaylistItems(id, mediaIds);
     setPlaylists(api.getPlaylists());
+  };
+
+  const handleUpdatePlaylist = (id: string, name: string, description: string, mediaIds: string[]) => {
+    api.updatePlaylist(id, name, description, mediaIds);
+    setPlaylists(api.getPlaylists());
+  };
+
+  const handleToggleDeviceStatus = (id: string) => {
+    api.toggleDeviceStatus(id);
+    setDevices(api.getDevices());
+  };
+
+  const handlePingDevice = (id: string) => {
+    api.pingDevice(id);
+    setDevices(api.getDevices());
   };
 
   // Controles de Mídias
@@ -535,9 +551,22 @@ export function App() {
 
           {/* Top Actions: Totem Live Signal + Active Device Indicator */}
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-simper-navy-deep px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-simper-navy-border text-xs font-semibold text-slate-700 dark:text-slate-300">
-              <Radio className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
-              <span>Totem Principal: <strong>{devices[0]?.pairing_code || 'SMPX5S'}</strong></span>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${
+              isDeviceOnline(devices[0]) 
+                ? 'bg-slate-100 dark:bg-simper-navy-deep border-slate-200/80 dark:border-simper-navy-border text-slate-700 dark:text-slate-300' 
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
+            }`}>
+              {isDeviceOnline(devices[0]) ? (
+                <>
+                  <Radio className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                  <span>Totem Principal: <strong>{devices[0]?.pairing_code || 'SMPX5S'}</strong> (Online)</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span>Totem: <strong>{devices[0]?.pairing_code || 'SMPX5S'}</strong> (Desligado)</span>
+                </>
+              )}
             </div>
 
             <span className="text-[11px] font-mono text-slate-400">
@@ -571,6 +600,8 @@ export function App() {
               onAssignPlaylist={handleAssignPlaylist}
               onUpdateRotation={handleUpdateRotation}
               onTogglePlayPause={handleTogglePlayPause}
+              onToggleDeviceStatus={handleToggleDeviceStatus}
+              onPingDevice={handlePingDevice}
             />
           )}
 
@@ -581,6 +612,7 @@ export function App() {
               onCreatePlaylist={handleCreatePlaylist}
               onDeletePlaylist={handleDeletePlaylist}
               onUpdatePlaylistItems={handleUpdatePlaylistItems}
+              onUpdatePlaylist={handleUpdatePlaylist}
             />
           )}
 

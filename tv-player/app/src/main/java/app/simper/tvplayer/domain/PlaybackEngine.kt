@@ -64,7 +64,12 @@ class PlaybackEngine(
             )
             .build()
 
-        exoPlayer = ExoPlayer.Builder(context)
+        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context).apply {
+            setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            setEnableDecoderFallback(true)
+        }
+
+        exoPlayer = ExoPlayer.Builder(context, renderersFactory)
             .setLoadControl(loadControl)
             .build()
             .apply {
@@ -76,7 +81,7 @@ class PlaybackEngine(
                     .setUsage(C.USAGE_MEDIA)
                     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                     .build()
-                setAudioAttributes(audioAttributes, false)
+                setAudioAttributes(audioAttributes, true)
 
                 addListener(object : Player.Listener {
                     override fun onPlaybackStateChanged(playbackState: Int) {
@@ -84,6 +89,7 @@ class PlaybackEngine(
                             Player.STATE_READY -> {
                                 imageView.visibility = View.GONE
                                 playerView.visibility = View.VISIBLE
+                                Log.i(SimperApplication.TAG, "Vídeo pronto para reprodução (STATE_READY)")
                             }
                             Player.STATE_ENDED -> {
                                 Log.d(SimperApplication.TAG, "Vídeo finalizado com sucesso.")
@@ -93,7 +99,7 @@ class PlaybackEngine(
                     }
 
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        Log.e(SimperApplication.TAG, "ExoPlayer erro: ${error.message}. Pulando...")
+                        Log.e(SimperApplication.TAG, "ExoPlayer erro [${error.errorCodeName}]: ${error.message}. Pulando...")
                         handleItemCompleted()
                     }
                 })
@@ -196,7 +202,12 @@ class PlaybackEngine(
         val localFile = cacheManager.getLocalFile(media)
 
         if (media.type == "video") {
-            playVideo(localFile?.toURI()?.toString() ?: media.url)
+            val videoUri = if (localFile != null && localFile.exists() && localFile.length() > 0) {
+                Uri.fromFile(localFile).toString()
+            } else {
+                media.url
+            }
+            playVideo(videoUri)
         } else {
             playImage(localFile ?: media.url, duration)
         }
@@ -204,6 +215,18 @@ class PlaybackEngine(
 
     private fun playVideo(uriString: String) {
         imageTimerJob?.cancel()
+
+        // Vídeo precisa de superfície visível ANTES do prepare, senão a TV fica sem imagem
+        imageView.animate().cancel()
+        imageView.visibility = View.GONE
+        playerView.visibility = View.VISIBLE
+
+        if (uriString.startsWith("data:")) {
+            // Vídeo em base64 ainda não decodificado no cache: pula para não travar a TV (OOM)
+            Log.w(SimperApplication.TAG, "Vídeo base64 sem cache local, pulando item.")
+            engineScope.launch { delay(1000L); handleItemCompleted() }
+            return
+        }
 
         exoPlayer?.let { player ->
             player.stop()

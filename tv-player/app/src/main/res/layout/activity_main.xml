@@ -11,14 +11,18 @@
         android:id="@+id/playerContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:visibility="gone">
 
-        <!-- ExoPlayer PlayerView -->
+        <!-- ExoPlayer PlayerView com TextureView para suportar rotação 90° e vídeo contínuo -->
         <androidx.media3.ui.PlayerView
             android:id="@+id/playerView"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             app:resize_mode="zoom"
+            app:surface_type="texture_view"
+            app:use_controller="false"
             android:background="@color/simper_black" />
 
         <!-- ImageView para anúncios estáticos (Preenche 100% da tela) -->

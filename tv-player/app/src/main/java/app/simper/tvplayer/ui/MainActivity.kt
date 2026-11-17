@@ -16,6 +16,7 @@ import app.simper.tvplayer.SimperApplication
 import app.simper.tvplayer.data.local.LocalMediaCacheManager
 import app.simper.tvplayer.data.model.MediaItem
 import app.simper.tvplayer.data.model.PlaylistItem
+import app.simper.tvplayer.data.remote.ServerConfig
 import app.simper.tvplayer.data.remote.TvApiClient
 import app.simper.tvplayer.databinding.ActivityMainBinding
 import app.simper.tvplayer.domain.OrientationController
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     private var currentRemotePlaying = true
     private var currentTransition = "fade"
     private var lastPlaylistFingerprint = ""
+    private var lastMediaFetchMs = 0L
     private var cloudSyncJob: Job? = null
     private var overlayHideJob: Job? = null
 
@@ -63,6 +65,13 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("simper_prefs", Context.MODE_PRIVATE)
         val isPaired = prefs.getBoolean("is_paired", false)
+        val savedRotation = prefs.getInt("rotation_degrees", 0)
+
+        // Aplica rotação salva imediatamente no boot da TV (sem esperar internet)
+        if (savedRotation != 0) {
+            currentRotation = savedRotation
+            OrientationController.applyOrientation(this, binding.rootContainer, savedRotation)
+        }
 
         val code = syncManager.pairingCode
         binding.pairingCodeText.text = code
@@ -129,7 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun initServices() {
         cacheManager = LocalMediaCacheManager(this)
-        apiClient = TvApiClient()
+        apiClient = TvApiClient(this)
         syncManager = SyncManager(this, cacheManager, apiClient)
 
         playbackEngine = PlaybackEngine(
@@ -180,33 +189,51 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Sincronização em nuvem com o Supabase:
-     * 1. Registra a TV no banco e obtém status
-     * 2. Monitora a adição de novas mídias e rotação
+     * Sincronização da TV: consulta Supabase e Servidor Local para comandos em tempo real
+     * (Rotação 90°, Play/Pause, Novas Mídias e Heartbeat).
      */
     private fun startCloudSyncWorkflow() {
         cloudSyncJob?.cancel()
         cloudSyncJob = lifecycleScope.launch(Dispatchers.IO) {
             val code = syncManager.pairingCode
             val fingerprint = syncManager.deviceFingerprint
+            val prefs = getSharedPreferences("simper_prefs", Context.MODE_PRIVATE)
 
-            // 1. Registra no banco para o código aparecer no painel
+            // 0. Busca o servidor Supabase atual no tv-config.json remoto (troca sem reinstalar APK)
+            ServerConfig.refreshFromRemote(this@MainActivity)
+            var lastConfigCheckMs = System.currentTimeMillis()
+            var lastRegisterTryMs = 0L
             var deviceJson: JSONObject? = null
-            while (isActive && deviceJson == null) {
+            var attempts = 0
+            while (isActive && deviceJson == null && attempts < 2) {
+                attempts++
                 deviceJson = apiClient.getOrRegisterDevice(code, fingerprint)
                 if (deviceJson == null) {
-                    delay(5000L)
+                    delay(1500L)
                 }
             }
 
-            if (deviceJson != null) {
-                currentDeviceId = deviceJson.optString("id", "")
-                val rotation = deviceJson.optInt("rotation_degrees", 0)
-
-                withContext(Dispatchers.Main) {
-                    OrientationController.applyOrientation(this@MainActivity, binding.rootContainer, rotation)
-                    binding.statusText.text = "Conectado ao Supabase!\nCódigo: $code\nSincronizando com o painel web..."
+            if (deviceJson == null) {
+                val savedRot = prefs.getInt("rotation_degrees", currentRotation)
+                deviceJson = JSONObject().apply {
+                    put("id", "tv_$code")
+                    put("pairing_code", code)
+                    put("rotation_degrees", savedRot)
+                    put("status", "online")
+                    put("is_playing", true)
                 }
+                Log.w(SimperApplication.TAG, "Usando perfil local da TV enquanto Supabase sincroniza.")
+            }
+
+            currentDeviceId = deviceJson.optString("id", "tv_$code")
+            val initialRotation = deviceJson.optInt("rotation_degrees", currentRotation)
+            if (initialRotation != currentRotation) {
+                currentRotation = initialRotation
+            }
+
+            withContext(Dispatchers.Main) {
+                OrientationController.applyOrientation(this@MainActivity, binding.rootContainer, currentRotation)
+                binding.statusText.text = "TV Conectada ao Sistema!\nCódigo: $code\nSincronizando mídias e comandos..."
             }
 
             // Inicia Heartbeat
@@ -215,13 +242,35 @@ class MainActivity : AppCompatActivity() {
             // 2. Loop de verificação de comandos remotos (Rotação, Play/Pause) e mídias
             while (isActive) {
                 try {
+                    // 0. A cada 10 min confere se o servidor foi trocado no tv-config.json
+                    val loopNow = System.currentTimeMillis()
+                    if (loopNow - lastConfigCheckMs >= 600_000L) {
+                        lastConfigCheckMs = loopNow
+                        if (ServerConfig.refreshFromRemote(this@MainActivity)) {
+                            Log.i(SimperApplication.TAG, "Servidor alterado remotamente. Reconectando...")
+                            withContext(Dispatchers.Main) { startCloudSyncWorkflow() }
+                            return@launch
+                        }
+                    }
+
+                    // 0.1 Se ainda está com perfil local (cadastro falhou), tenta cadastrar de novo a cada 30s
+                    if (currentDeviceId?.startsWith("tv_") == true && loopNow - lastRegisterTryMs >= 30_000L) {
+                        lastRegisterTryMs = loopNow
+                        apiClient.getOrRegisterDevice(code, fingerprint)?.optString("id", "")?.takeIf { it.isNotEmpty() }?.let { realId ->
+                            currentDeviceId = realId
+                            syncManager.startHeartbeat(realId)
+                            Log.i(SimperApplication.TAG, "TV cadastrada no Supabase: $realId")
+                        }
+                    }
+
                     // A. Sincroniza configurações da TV (Rotação, Transição, Play/Pause, Próximo/Anterior)
                     val dev = apiClient.fetchDevice(code)
                     if (dev != null) {
-                        // 1. Rotação em tempo real
-                        val rotation = dev.optInt("rotation_degrees", 0)
+                        // 1. Rotação em tempo real (0°, 90°, 180°, 270°)
+                        val rotation = dev.optInt("rotation_degrees", currentRotation)
                         if (rotation != currentRotation) {
                             currentRotation = rotation
+                            prefs.edit().putInt("rotation_degrees", rotation).apply()
                             Log.i(SimperApplication.TAG, "Comando de rotação recebido: $rotation°")
                             withContext(Dispatchers.Main) {
                                 OrientationController.applyOrientation(this@MainActivity, binding.rootContainer, rotation)
@@ -263,7 +312,12 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     // B. Sincroniza mídias ativas e mudanças de duração
-                    val mediaList = apiClient.fetchActiveMedia()
+                    // (a cada ~30s para não estourar a cota de tráfego do Supabase)
+                    val nowMs = System.currentTimeMillis()
+                    val mediaList = if (!isPlayingMode || nowMs - lastMediaFetchMs >= 30_000L) {
+                        lastMediaFetchMs = nowMs
+                        apiClient.fetchActiveMedia()
+                    } else emptyList()
                     if (mediaList.isNotEmpty()) {
                         // Marca como pareada permanentemente
                         val prefs = getSharedPreferences("simper_prefs", Context.MODE_PRIVATE)
@@ -354,6 +408,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        // Configuração do servidor: botão VERMELHO, tecla SETTINGS, ou MENU na tela de pareamento
+        if (keyCode == KeyEvent.KEYCODE_PROG_RED || keyCode == KeyEvent.KEYCODE_SETTINGS ||
+            (keyCode == KeyEvent.KEYCODE_MENU && !isPlayingMode)
+        ) {
+            showServerConfigDialog()
+            return true
+        }
         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || 
             keyCode == KeyEvent.KEYCODE_ENTER || 
             keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER ||
@@ -393,6 +454,40 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Controle Remoto Físico da TV: Girar Tela 90° com a Seta para CIMA ou Tecla AMARELA
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_PROG_YELLOW) {
+            val nextRot = when (currentRotation) {
+                0 -> 90
+                90 -> 270
+                270 -> 180
+                else -> 0
+            }
+            currentRotation = nextRot
+            val prefs = getSharedPreferences("simper_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putInt("rotation_degrees", nextRot).apply()
+            OrientationController.applyOrientation(this, binding.rootContainer, nextRot)
+            android.widget.Toast.makeText(this, "Rotação da Tela: $nextRot°", android.widget.Toast.LENGTH_SHORT).show()
+            Log.i(SimperApplication.TAG, "Controle Remoto TV: Tela girada para $nextRot°")
+            return true
+        }
+
+        // Controle Remoto Físico da TV: Girar Tela com a Seta para BAIXO ou Tecla AZUL
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_PROG_BLUE) {
+            val nextRot = when (currentRotation) {
+                0 -> 270
+                270 -> 90
+                90 -> 0
+                else -> 0
+            }
+            currentRotation = nextRot
+            val prefs = getSharedPreferences("simper_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putInt("rotation_degrees", nextRot).apply()
+            OrientationController.applyOrientation(this, binding.rootContainer, nextRot)
+            android.widget.Toast.makeText(this, "Rotação da Tela: $nextRot°", android.widget.Toast.LENGTH_SHORT).show()
+            Log.i(SimperApplication.TAG, "Controle Remoto TV: Tela girada para $nextRot°")
+            return true
+        }
+
         // Controle Remoto Físico da TV: Avançar anúncio
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || 
             keyCode == KeyEvent.KEYCODE_MEDIA_NEXT || 
@@ -429,6 +524,58 @@ class MainActivity : AppCompatActivity() {
         }
 
         return super.onKeyDown(keyCode, event)
+    }
+
+    /** Tela para trocar o servidor Supabase pelo controle remoto, sem reinstalar o APK. */
+    private fun showServerConfigDialog() {
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val urlInput = android.widget.EditText(this).apply {
+            hint = "https://xxxx.supabase.co"
+            setText(ServerConfig.url(this@MainActivity))
+            isSingleLine = true
+        }
+        val keyInput = android.widget.EditText(this).apply {
+            hint = "anon key (eyJ...)"
+            setText(ServerConfig.key(this@MainActivity))
+            isSingleLine = true
+        }
+        val layout = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+            addView(android.widget.TextView(context).apply { text = "URL do Supabase" })
+            addView(urlInput)
+            addView(android.widget.TextView(context).apply { text = "Anon key" })
+            addView(keyInput)
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Servidor Simper")
+            .setView(layout)
+            .setPositiveButton("Salvar") { _, _ ->
+                val u = urlInput.text.toString().trim()
+                val k = keyInput.text.toString().trim()
+                if (!ServerConfig.isValid(u, k)) {
+                    android.widget.Toast.makeText(this, "URL ou chave inválida", android.widget.Toast.LENGTH_LONG).show()
+                } else {
+                    ServerConfig.save(this, u, k)
+                    android.widget.Toast.makeText(this, "Servidor salvo. Reconectando...", android.widget.Toast.LENGTH_SHORT).show()
+                    currentDeviceId = null
+                    startCloudSyncWorkflow()
+                }
+            }
+            .setNeutralButton("Atualizar da nuvem") { _, _ ->
+                lifecycleScope.launch {
+                    val changed = ServerConfig.refreshFromRemote(this@MainActivity)
+                    android.widget.Toast.makeText(
+                        this@MainActivity,
+                        if (changed) "Servidor atualizado. Reconectando..." else "Configuração já está atualizada",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                    startCloudSyncWorkflow()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     override fun onDestroy() {

@@ -16,27 +16,34 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * Cliente HTTP conectado diretamente à instância de produção do Supabase.
+ * Cliente HTTP conectado à Nuvem (Supabase) com redundância automática
+ * para o Servidor Local da Rede (Edge Server na porta 8080).
  */
 class TvApiClient(
-    private val supabaseUrl: String = "https://gnzkagrbdoxmlqawmyrs.supabase.co",
-    private val supabaseAnonKey: String = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImduemthZ3JiZG94bWxxYXdteXJzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQzMzQ1MzQsImV4cCI6MjEwOTkxMDUzNH0.kDmLH2kAQx-IB2RPpDhwHbb4rsSrBQC7if3bYkGs5IU"
+    private val context: android.content.Context,
+    var localServerUrl: String = "http://192.168.3.13:8080"
 ) {
 
+    // Lidos a cada chamada: permite trocar de Supabase sem reinstalar (ver ServerConfig)
+    private val supabaseUrl: String get() = ServerConfig.url(context)
+    private val supabaseAnonKey: String get() = ServerConfig.key(context)
+
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /**
      * Consulta as configurações mais recentes da TV (Rotação, Status, Playlist, Play/Pause).
+     * Tenta o Supabase primeiro; se a cota do Supabase estourar, consulta o Servidor Local.
      */
     suspend fun fetchDevice(pairingCode: String): JSONObject? = withContext(Dispatchers.IO) {
+        // 1. Tenta Supabase
         try {
             val request = Request.Builder()
-                .url("$supabaseUrl/rest/v1/devices?pairing_code=eq.$pairingCode&select=*")
+                .url("$supabaseUrl/rest/v1/devices?pairing_code=eq.$pairingCode&select=id,rotation_degrees,transition,is_playing,current_media_index")
                 .header("apikey", supabaseAnonKey)
                 .header("Authorization", "Bearer $supabaseAnonKey")
                 .build()
@@ -49,8 +56,25 @@ class TvApiClient(
                 }
             }
         } catch (e: Exception) {
-            Log.w(SimperApplication.TAG, "Erro ao buscar config da TV: ${e.message}")
+            // Continua para o servidor local
         }
+
+        // 2. Fallback: Servidor Local na Rede (192.168.3.13:8080)
+        try {
+            val localRequest = Request.Builder()
+                .url("$localServerUrl/api/device/sync")
+                .build()
+
+            val localResponse = httpClient.newCall(localRequest).execute()
+            if (localResponse.isSuccessful && localResponse.body != null) {
+                val obj = JSONObject(localResponse.body!!.string())
+                Log.d(SimperApplication.TAG, "Config obtida do servidor local: Rotação ${obj.optInt("rotation_degrees")}°")
+                return@withContext obj
+            }
+        } catch (e: Exception) {
+            // Servidor local também não respondeu
+        }
+
         null
     }
 
@@ -59,8 +83,8 @@ class TvApiClient(
      * ou consulta o status do pareamento pelo pairing_code.
      */
     suspend fun getOrRegisterDevice(pairingCode: String, fingerprint: String): JSONObject? = withContext(Dispatchers.IO) {
+        // 1. Tenta Supabase
         try {
-            // 1. Tenta buscar o dispositivo no banco pelo fingerprint ou código
             val getRequest = Request.Builder()
                 .url("$supabaseUrl/rest/v1/devices?pairing_code=eq.$pairingCode&select=*")
                 .header("apikey", supabaseAnonKey)
@@ -75,7 +99,6 @@ class TvApiClient(
                 }
             }
 
-            // 2. Se não existir, insere para que apareça no painel
             val payload = """
                 {
                     "pairing_code": "$pairingCode",
@@ -105,20 +128,32 @@ class TvApiClient(
                     return@withContext array.getJSONObject(0)
                 }
             }
-            null
         } catch (e: Exception) {
-            Log.e(SimperApplication.TAG, "Erro ao registrar/buscar dispositivo no Supabase: ${e.message}")
-            null
+            Log.w(SimperApplication.TAG, "Aviso Supabase: ${e.message}")
         }
+
+        // 2. Fallback: Servidor Local
+        try {
+            val localRequest = Request.Builder().url("$localServerUrl/api/device/sync").build()
+            val localResponse = httpClient.newCall(localRequest).execute()
+            if (localResponse.isSuccessful && localResponse.body != null) {
+                return@withContext JSONObject(localResponse.body!!.string())
+            }
+        } catch (e: Exception) {
+            // Ignora
+        }
+
+        null
     }
 
     /**
-     * Busca a lista de mídias ativas no Supabase para a TV reproduzir.
+     * Busca a lista de mídias ativas para a TV reproduzir (Nuvem ou Servidor Local).
      */
     suspend fun fetchActiveMedia(): List<PlaylistItem> = withContext(Dispatchers.IO) {
+        // 1. Tenta Supabase
         try {
             val request = Request.Builder()
-                .url("$supabaseUrl/rest/v1/media_items?select=*&order=created_at.desc&limit=20")
+                .url("$supabaseUrl/rest/v1/media_items?select=id,title,type,public_url,duration_seconds&public_url=not.like.data:*&order=created_at.desc&limit=20")
                 .header("apikey", supabaseAnonKey)
                 .header("Authorization", "Bearer $supabaseAnonKey")
                 .build()
@@ -126,36 +161,60 @@ class TvApiClient(
             val response = httpClient.newCall(request).execute()
             if (response.isSuccessful && response.body != null) {
                 val array = JSONArray(response.body!!.string())
-                val list = mutableListOf<PlaylistItem>()
-
-                for (i in 0 until array.length()) {
-                    val obj = array.getJSONObject(i)
-                    val mediaItem = MediaItem(
-                        id = obj.getString("id"),
-                        title = obj.getString("title"),
-                        type = obj.getString("type"),
-                        url = obj.getString("public_url"),
-                        checksumSha256 = obj.optString("checksum_sha256", "hash_$i"),
-                        durationSeconds = obj.optInt("duration_seconds", 10),
-                        width = obj.optInt("width", 1920),
-                        height = obj.optInt("height", 1080)
-                    )
-                    list.add(
-                        PlaylistItem(
-                            id = "item_$i",
-                            playlistId = "main_playlist",
-                            mediaItem = mediaItem,
-                            displayOrder = i + 1,
-                            customDurationSeconds = mediaItem.durationSeconds
-                        )
-                    )
-                }
-                return@withContext list
+                val list = parseMediaArray(array)
+                if (list.isNotEmpty()) return@withContext list
             }
         } catch (e: Exception) {
-            Log.e(SimperApplication.TAG, "Erro ao buscar mídias do Supabase: ${e.message}")
+            // Continua para o servidor local
         }
+
+        // 2. Fallback: Servidor Local na Rede (192.168.3.13:8080)
+        try {
+            val localRequest = Request.Builder().url("$localServerUrl/api/device/sync").build()
+            val localResponse = httpClient.newCall(localRequest).execute()
+            if (localResponse.isSuccessful && localResponse.body != null) {
+                val obj = JSONObject(localResponse.body!!.string())
+                val mediaArray = obj.optJSONArray("media_items")
+                if (mediaArray != null && mediaArray.length() > 0) {
+                    val list = parseMediaArray(mediaArray)
+                    Log.i(SimperApplication.TAG, "Carregadas ${list.size} mídias do servidor local.")
+                    return@withContext list
+                }
+            }
+        } catch (e: Exception) {
+            // Falha silenciosa
+        }
+
         emptyList()
+    }
+
+    private fun parseMediaArray(array: JSONArray): List<PlaylistItem> {
+        val list = mutableListOf<PlaylistItem>()
+        for (i in 0 until array.length()) {
+            val obj = array.getJSONObject(i)
+            val mediaItem = MediaItem(
+                id = obj.optString("id", "item_$i"),
+                title = obj.optString("title", "Anúncio"),
+                type = obj.optString("type", "image"),
+                url = obj.optString("public_url", ""),
+                checksumSha256 = obj.optString("checksum_sha256", "hash_$i"),
+                durationSeconds = obj.optInt("duration_seconds", 10),
+                width = 1920,
+                height = 1080
+            )
+            if (mediaItem.url.isNotEmpty()) {
+                list.add(
+                    PlaylistItem(
+                        id = "item_$i",
+                        playlistId = "main_playlist",
+                        mediaItem = mediaItem,
+                        displayOrder = i + 1,
+                        customDurationSeconds = mediaItem.durationSeconds
+                    )
+                )
+            }
+        }
+        return list
     }
 
     /**
@@ -167,16 +226,23 @@ class TvApiClient(
         totalStorageMb: Long,
         appVersion: String
     ): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val payload = """
-                {
-                    "status": "online",
-                    "storage_free_mb": $freeStorageMb,
-                    "storage_total_mb": $totalStorageMb,
-                    "app_version": "$appVersion"
-                }
-            """.trimIndent()
+        val isoFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
+        val nowIso = isoFormat.format(java.util.Date())
 
+        val payload = """
+            {
+                "status": "online",
+                "last_ping": "$nowIso",
+                "storage_free_mb": $freeStorageMb,
+                "storage_total_mb": $totalStorageMb,
+                "app_version": "$appVersion"
+            }
+        """.trimIndent()
+
+        // Envia para o Supabase
+        try {
             val request = Request.Builder()
                 .url("$supabaseUrl/rest/v1/devices?id=eq.$deviceId")
                 .header("apikey", supabaseAnonKey)
@@ -184,13 +250,20 @@ class TvApiClient(
                 .header("Prefer", "return=minimal")
                 .patch(payload.toRequestBody(jsonMediaType))
                 .build()
+            httpClient.newCall(request).execute()
+        } catch (_: Exception) {}
 
-            val response = httpClient.newCall(request).execute()
-            response.isSuccessful
-        } catch (e: Exception) {
-            Log.w(SimperApplication.TAG, "Falha no ping para Supabase: ${e.message}")
-            false
-        }
+        // Envia também para o Servidor Local na porta 8080
+        try {
+            val localRequest = Request.Builder()
+                .url("$localServerUrl/api/device/heartbeat")
+                .post(payload.toRequestBody(jsonMediaType))
+                .build()
+            val res = httpClient.newCall(localRequest).execute()
+            return@withContext res.isSuccessful
+        } catch (_: Exception) {}
+
+        true
     }
 
     /**
@@ -217,7 +290,6 @@ class TvApiClient(
             val response = httpClient.newCall(request).execute()
             response.isSuccessful
         } catch (e: Exception) {
-            Log.w(SimperApplication.TAG, "Falha ao registrar Proof-of-Play: ${e.message}")
             false
         }
     }

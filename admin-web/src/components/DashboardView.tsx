@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Tv, 
+  MonitorOff,
   Smartphone, 
   SkipBack, 
   SkipForward, 
   Play, 
   Pause, 
-  RotateCw,
-  Clock,
-  Layers,
-  Activity,
-  CheckCircle2,
-  Sparkles
+  RotateCw, 
+  Clock, 
+  Layers, 
+  Activity, 
+  CheckCircle2, 
+  Sparkles,
+  WifiOff
 } from 'lucide-react';
 import type { Device, MediaItem, Playlist } from '../types/database';
+import { isDeviceOnline, formatLastPing } from '../lib/deviceStatus';
 
 interface Props {
   devices: Device[];
@@ -38,10 +41,11 @@ export const DashboardView: React.FC<Props> = ({
 }) => {
   // Dispositivo selecionado para o preview ao vivo
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(() => {
-    return devices.find(d => d.status === 'online')?.id || devices[0]?.id || '';
+    return devices.find(d => isDeviceOnline(d))?.id || devices[0]?.id || '';
   });
 
   const activeDevice = devices.find(d => d.id === selectedDeviceId) || devices[0];
+  const isTvOnline = isDeviceOnline(activeDevice);
 
   // 1. Obtém a lista real de anúncios da playlist vinculada a este terminal
   const currentDeviceMediaList = useMemo(() => {
@@ -73,7 +77,7 @@ export const DashboardView: React.FC<Props> = ({
 
   // Ciclo dinâmico de reprodução exatamente igual ao da Smart TV física (sem barras ou overlays na tela)
   useEffect(() => {
-    if (!isCurrentlyPlaying || currentDeviceMediaList.length === 0) return;
+    if (!isCurrentlyPlaying || currentDeviceMediaList.length === 0 || !isTvOnline) return;
 
     const safeIdx = ((playbackIndex % currentDeviceMediaList.length) + currentDeviceMediaList.length) % currentDeviceMediaList.length;
     const currentItem = currentDeviceMediaList[safeIdx];
@@ -84,7 +88,7 @@ export const DashboardView: React.FC<Props> = ({
     }, duration * 1000);
 
     return () => clearTimeout(timer);
-  }, [isCurrentlyPlaying, playbackIndex, currentDeviceMediaList]);
+  }, [isCurrentlyPlaying, playbackIndex, currentDeviceMediaList, isTvOnline]);
 
   const count = currentDeviceMediaList.length;
   const currentSafeIndex = count > 0 ? ((playbackIndex % count) + count) % count : 0;
@@ -103,29 +107,53 @@ export const DashboardView: React.FC<Props> = ({
   };
 
   const totalCycleSeconds = currentDeviceMediaList.reduce((acc, m) => acc + (m.duration_seconds || 10), 0);
-  const onlineCount = devices.filter(d => d.status === 'online').length;
+  const onlineCount = devices.filter(d => isDeviceOnline(d)).length;
+  const offlineCount = devices.length - onlineCount;
 
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* 1. SELETOR DE TERMINAL ATIVO & KPI METRICS BAR */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI: Terminais Online */}
-        <div className="bg-white/80 dark:bg-simper-navy-card/90 backdrop-blur-xl border border-slate-200/80 dark:border-simper-navy-border rounded-2xl p-4 sm:p-5 shadow-xs hover:border-slate-300 dark:hover:border-simper-gold/30 transition-all">
+        {/* KPI: Terminais Conectados / Desligados */}
+        <div className={`bg-white/80 dark:bg-simper-navy-card/90 backdrop-blur-xl border rounded-2xl p-4 sm:p-5 shadow-xs transition-all ${
+          onlineCount > 0 
+            ? 'border-slate-200/80 dark:border-simper-navy-border hover:border-slate-300 dark:hover:border-simper-gold/30' 
+            : 'border-rose-300 dark:border-rose-900/60 bg-rose-50/30 dark:bg-rose-950/20'
+        }`}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Terminais Conectados</span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <Activity className="w-4 h-4 animate-pulse" />
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+              onlineCount > 0 
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                : 'bg-rose-500/10 text-rose-500'
+            }`}>
+              {onlineCount > 0 ? (
+                <Activity className="w-4 h-4 animate-pulse" />
+              ) : (
+                <MonitorOff className="w-4 h-4 text-rose-500" />
+              )}
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            <span className={`text-3xl font-extrabold tracking-tight ${
+              onlineCount > 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600 dark:text-rose-400'
+            }`}>
               {onlineCount}
             </span>
-            <span className="text-xs text-slate-400 font-medium">/ {devices.length} online</span>
+            <span className="text-xs text-slate-400 font-medium">/ {devices.length} {onlineCount === 1 ? 'online' : 'online'}</span>
           </div>
-          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            Transmissão contínua ativa
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold">
+            {onlineCount > 0 ? (
+              <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                Transmissão contínua ativa
+              </span>
+            ) : (
+              <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                {offlineCount} {offlineCount === 1 ? 'TV desligada' : 'TVs desligadas'} / sem sinal
+              </span>
+            )}
           </div>
         </div>
 
@@ -194,19 +222,41 @@ export const DashboardView: React.FC<Props> = ({
         {/* COLUNA ESQUERDA: GABINETE TOTEM VERTICAL REALISTA (9:16) */}
         <div className="lg:col-span-5 bg-white/90 dark:bg-simper-navy-card/95 backdrop-blur-2xl border border-slate-200/80 dark:border-simper-navy-border rounded-3xl p-6 sm:p-7 shadow-lg flex flex-col items-center relative overflow-hidden transition-all">
           
-          {/* Header do Card Totem */}
+          {/* Header do Card Totem com Indicador de Conexão Real da TV */}
           <div className="w-full flex items-center justify-between pb-4 mb-5 border-b border-slate-100 dark:border-simper-navy-border">
             <div className="flex items-center gap-2.5">
               <span className="relative flex h-3 w-3">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isCurrentlyPlaying ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                <span className={`relative inline-flex rounded-full h-3 w-3 ${isCurrentlyPlaying ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  !isTvOnline 
+                    ? 'bg-rose-400' 
+                    : isCurrentlyPlaying 
+                      ? 'bg-emerald-400' 
+                      : 'bg-amber-400'
+                }`} />
+                <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                  !isTvOnline 
+                    ? 'bg-rose-500' 
+                    : isCurrentlyPlaying 
+                      ? 'bg-emerald-500' 
+                      : 'bg-amber-500'
+                }`} />
               </span>
               <div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
                   Totem Vertical (9:16)
                 </h2>
-                <span className="text-[10px] text-slate-400">
-                  {isCurrentlyPlaying ? 'Transmitindo ao vivo' : 'Reprodução em Pausa'}
+                <span className={`text-[10px] font-bold ${
+                  !isTvOnline 
+                    ? 'text-rose-500' 
+                    : isCurrentlyPlaying 
+                      ? 'text-emerald-600 dark:text-emerald-400' 
+                      : 'text-amber-500'
+                }`}>
+                  {!isTvOnline 
+                    ? '🔴 TV Desligada / Sem Conexão' 
+                    : isCurrentlyPlaying 
+                      ? '🟢 Transmitindo ao vivo' 
+                      : '🟡 Reprodução em Pausa'}
                 </span>
               </div>
             </div>
@@ -220,13 +270,17 @@ export const DashboardView: React.FC<Props> = ({
               >
                 {devices.map(d => (
                   <option key={d.id} value={d.id}>
-                    {d.name} ({d.pairing_code})
+                    {d.name} ({d.pairing_code}) {isDeviceOnline(d) ? '• Online' : '• Desligada'}
                   </option>
                 ))}
               </select>
             ) : (
-              <span className="text-xs font-mono font-bold text-simper-gold bg-simper-gold/10 border border-simper-gold/30 px-3 py-1 rounded-xl">
-                Cód: {activeDevice?.pairing_code || 'SMPX5S'}
+              <span className={`text-xs font-mono font-bold px-3 py-1 rounded-xl border ${
+                isTvOnline 
+                  ? 'text-simper-gold bg-simper-gold/10 border-simper-gold/30' 
+                  : 'text-rose-500 bg-rose-500/10 border-rose-500/30'
+              }`}>
+                {isTvOnline ? `Cód: ${activeDevice?.pairing_code || 'SMPX5S'}` : 'DESLIGADA'}
               </span>
             )}
           </div>
@@ -244,7 +298,7 @@ export const DashboardView: React.FC<Props> = ({
                   <video 
                     src={activeMedia.url} 
                     className="w-full h-full object-cover" 
-                    autoPlay={isCurrentlyPlaying}
+                    autoPlay={isCurrentlyPlaying && isTvOnline}
                     loop 
                     muted 
                   />
@@ -264,8 +318,38 @@ export const DashboardView: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* OVERLAY: EM PAUSA (QUANDO O USUÁRIO PAUSA A TV) */}
-              {!isCurrentlyPlaying && (
+              {/* OVERLAY: TV DESLIGADA OU NÃO CONECTADA AO SISTEMA */}
+              {!isTvOnline && (
+                <div className="absolute inset-0 bg-[#060913]/95 backdrop-blur-sm flex flex-col items-center justify-center p-5 text-center z-30 animate-fadeIn">
+                  {/* LED de Standby vermelho no canto superior */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/80 px-2 py-1 rounded-full border border-rose-500/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                    <span className="text-[8px] font-mono font-bold text-rose-400 uppercase tracking-wider">STANDBY</span>
+                  </div>
+
+                  <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-500 flex items-center justify-center mb-3 shadow-lg shadow-rose-950/30">
+                    <MonitorOff className="w-7 h-7" />
+                  </div>
+
+                  <span className="text-sm font-black text-white tracking-wider uppercase">
+                    TV Desligada
+                  </span>
+                  <span className="text-[11px] font-bold text-rose-400 mt-0.5">
+                    Não conectada ao sistema
+                  </span>
+
+                  <p className="text-[10px] text-slate-400 mt-2 max-w-[190px] leading-relaxed">
+                    A Smart TV está desligada da tomada, em espera ou sem sinal de internet Wi-Fi.
+                  </p>
+
+                  <div className="mt-3 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[10px] font-mono text-slate-300">
+                    Último sinal: <strong className="text-amber-400">{formatLastPing(activeDevice?.last_ping)}</strong>
+                  </div>
+                </div>
+              )}
+
+              {/* OVERLAY: EM PAUSA (QUANDO O USUÁRIO PAUSA A TV ONLINE) */}
+              {isTvOnline && !isCurrentlyPlaying && (
                 <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center z-20 animate-fadeIn">
                   <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center mb-3 shadow-lg">
                     <Pause className="w-7 h-7 fill-amber-400" />
@@ -279,29 +363,39 @@ export const DashboardView: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* Tag AO VIVO no canto superior */}
-              <div className="absolute top-3 left-3 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-lg text-[9px] font-extrabold text-white flex items-center gap-1.5 tracking-wider border border-white/10 z-10">
-                <span className={`w-1.5 h-1.5 rounded-full ${isCurrentlyPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                {isCurrentlyPlaying ? 'AO VIVO' : 'PAUSADO'}
+              {/* Tag de Status no canto superior esquerdo */}
+              <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-lg text-[9px] font-extrabold text-white flex items-center gap-1.5 tracking-wider border border-white/10 z-20">
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  !isTvOnline 
+                    ? 'bg-rose-500' 
+                    : isCurrentlyPlaying 
+                      ? 'bg-emerald-400 animate-pulse' 
+                      : 'bg-amber-400'
+                }`} />
+                {!isTvOnline ? 'DESLIGADA' : isCurrentlyPlaying ? 'AO VIVO' : 'PAUSADO'}
               </div>
 
-              {/* Tag 9:16 HD no canto superior direito */}
-              <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-md px-2 py-1 rounded-lg text-[9px] font-mono font-bold text-slate-300 border border-white/10 z-10">
-                9:16 HD
-              </div>
+              {/* Tag 9:16 HD no canto superior direito (quando online) */}
+              {isTvOnline && (
+                <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-md px-2 py-1 rounded-lg text-[9px] font-mono font-bold text-slate-300 border border-white/10 z-10">
+                  9:16 HD
+                </div>
+              )}
 
               {/* Barra de Informações do Anúncio no rodapé da tela */}
-              <div className="absolute bottom-3 left-3 right-3 bg-black/85 backdrop-blur-md p-2.5 rounded-xl text-white border border-white/10 z-10">
-                <p className="font-bold truncate text-xs leading-tight">{activeMedia?.title || 'Sem título'}</p>
-                <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
-                  <span className="font-mono text-simper-gold font-bold">
-                    #{currentSafeIndex + 1} de {currentDeviceMediaList.length} ({activeMedia?.duration_seconds || 10}s)
-                  </span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1 text-[9px]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Ao Vivo na TV
-                  </span>
+              {isTvOnline && (
+                <div className="absolute bottom-3 left-3 right-3 bg-black/85 backdrop-blur-md p-2.5 rounded-xl text-white border border-white/10 z-10">
+                  <p className="font-bold truncate text-xs leading-tight">{activeMedia?.title || 'Sem título'}</p>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                    <span className="font-mono text-simper-gold font-bold">
+                      #{currentSafeIndex + 1} de {currentDeviceMediaList.length} ({activeMedia?.duration_seconds || 10}s)
+                    </span>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1 text-[9px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Ao Vivo na TV
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Logo discreto na moldura inferior */}
@@ -319,6 +413,16 @@ export const DashboardView: React.FC<Props> = ({
           {/* PAINEL DE CONTROLE RÁPIDO DO TOTEM (PLAY/PAUSE / VOLTAR / AVANÇAR / GIRAR) */}
           {activeDevice && (
             <div className="w-full mt-6 pt-5 border-t border-slate-100 dark:border-simper-navy-border flex flex-col gap-3">
+              {/* Aviso se a TV estiver desligada */}
+              {!isTvOnline && (
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2.5">
+                  <WifiOff className="w-4 h-4 text-rose-500 shrink-0" />
+                  <div className="leading-tight">
+                    <strong>TV Desligada do Sistema:</strong> Ligue a TV na tomada e verifique o Wi-Fi para enviar comandos ao vivo.
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-center gap-2">
                 {/* Voltar Anúncio */}
                 <button
@@ -332,7 +436,7 @@ export const DashboardView: React.FC<Props> = ({
                   <SkipBack className="w-4 h-4" />
                 </button>
 
-                {/* BOTÃO PRINCIPAL PLAY / PAUSE COM FEEDBACK VISUAL CLARO */}
+                {/* BOTÃO PRINCIPAL PLAY / PAUSE */}
                 <button
                   onClick={() => onTogglePlayPause(activeDevice.id)}
                   title={isCurrentlyPlaying ? 'Pausar Reprodução na TV' : 'Retomar Reprodução na TV'}
@@ -455,7 +559,7 @@ export const DashboardView: React.FC<Props> = ({
                       </span>
 
                       {/* Badge "AO VIVO" se estiver tocando este */}
-                      {isPlayingThis && (
+                      {isPlayingThis && isTvOnline && (
                         <div className="absolute top-2 right-2 bg-emerald-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
                           <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                           NO AR
@@ -489,15 +593,20 @@ export const DashboardView: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* SEÇÃO 2: TERMINAIS SMART TV CADASTRADOS */}
+          {/* SEÇÃO 2: TERMINAIS SMART TV CADASTRADOS (MOSTRANDO ONLINE / DESLIGADA) */}
           <div className="bg-white/90 dark:bg-simper-navy-card/95 backdrop-blur-2xl border border-slate-200/80 dark:border-simper-navy-border rounded-3xl p-6 shadow-sm transition-all">
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-simper-navy-border">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Terminais Smart TV Ativos
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Terminais Smart TV Ativos</span>
+                  {offlineCount > 0 && (
+                    <span className="text-[10px] font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30 px-2 py-0.5 rounded-full">
+                      {offlineCount} {offlineCount === 1 ? 'desligada' : 'desligadas'}
+                    </span>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Aparelhos conectados recebendo a programação via nuvem.
+                  Status de conexão em tempo real e sinal de vida das telas.
                 </p>
               </div>
               <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 dark:bg-simper-navy-deep px-2.5 py-1 rounded-xl border border-slate-200 dark:border-simper-navy-border">
@@ -510,34 +619,56 @@ export const DashboardView: React.FC<Props> = ({
                 const devMedia = getActiveMediaForDevice(device);
                 const mediaCount = getMediaCountForDevice(device);
                 const isPlaying = device.playback_state === 'playing';
+                const isDevOnline = isDeviceOnline(device);
 
                 return (
                   <div
                     key={device.id}
-                    className="p-4 rounded-2xl bg-slate-50/80 dark:bg-simper-navy-deep/60 border border-slate-200/80 dark:border-simper-navy-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-slate-300 dark:hover:border-simper-gold/30 transition-all"
+                    className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+                      isDevOnline 
+                        ? 'bg-slate-50/80 dark:bg-simper-navy-deep/60 border-slate-200/80 dark:border-simper-navy-border hover:border-slate-300 dark:hover:border-simper-gold/30' 
+                        : 'bg-rose-50/30 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/60'
+                    }`}
                   >
                     <div className="flex items-center gap-3.5">
-                      <div className="w-11 h-11 rounded-2xl bg-white dark:bg-simper-navy-card border border-slate-200 dark:border-simper-navy-border flex items-center justify-center text-slate-700 dark:text-slate-300 shadow-xs shrink-0">
-                        {device.orientation === 'portrait' ? <Smartphone className="w-5 h-5 text-simper-gold" /> : <Tv className="w-5 h-5 text-simper-gold" />}
+                      <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center shadow-xs shrink-0 ${
+                        isDevOnline 
+                          ? 'bg-white dark:bg-simper-navy-card border-slate-200 dark:border-simper-navy-border text-slate-700 dark:text-slate-300' 
+                          : 'bg-rose-100 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-600'
+                      }`}>
+                        {isDevOnline ? (
+                          device.orientation === 'portrait' ? <Smartphone className="w-5 h-5 text-simper-gold" /> : <Tv className="w-5 h-5 text-simper-gold" />
+                        ) : (
+                          <MonitorOff className="w-5 h-5 text-rose-500" />
+                        )}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-bold text-slate-900 dark:text-white text-sm">
                             {device.name}
                           </span>
                           <span className="text-[10px] font-mono font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md">
                             {device.pairing_code}
                           </span>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Online
-                          </span>
+                          
+                          {/* Badge Visual Claro do Estado de Conexão */}
+                          {isDevOnline ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Conectada (Online)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Desligada / Sem Sinal
+                            </span>
+                          )}
                         </div>
+
                         <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                          <span>Sinal: <strong className={isDevOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}>{formatLastPing(device.last_ping)}</strong></span>
+                          <span>•</span>
                           <span>Tocando: <strong className="text-slate-700 dark:text-slate-200">{devMedia?.title || 'Nenhum'}</strong></span>
                           <span>•</span>
                           <span>{(device.current_media_index % mediaCount) + 1} de {mediaCount}</span>
-                          <span>•</span>
-                          <span className="capitalize">{device.transition_type}</span>
                           <span>•</span>
                           <span className="font-semibold text-simper-gold">{device.rotation_degrees}°</span>
                         </div>
